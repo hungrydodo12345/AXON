@@ -1,0 +1,39 @@
+{
+  "rules": {
+    "users": {
+      "$phoneNumber": {
+        ".read": "auth != null && auth.token.phone_number == $phoneNumber",
+        ".write": "auth != null && auth.token.phone_number == $phoneNumber",
+
+        "contacts": {
+          "$contactId": {
+            ".read": "auth != null && auth.token.phone_number == $phoneNumber",
+            ".write": "auth != null && auth.token.phone_number == $phoneNumber"
+          }
+        },
+
+        "messages": {
+          "$messageId": {
+            ".read": "auth != null && auth.token.phone_number == $phoneNumber",
+            ".write": "auth != null && auth.token.phone_number == $phoneNumber"
+          }
+        },
+
+        "overrides": {
+          "$overrideId": {
+            ".read": "auth != null && auth.token.phone_number == $phoneNumber",
+            ".write": "auth != null && auth.token.phone_number == $phoneNumber"
+          }
+        },
+
+        "gargoyle_log": {
+          "$eventId": {
+            ".read": "auth != null && auth.token.phone_number == $phoneNumber",
+            ".write": "auth != null && auth.token.phone_number == $phoneNumber",
+            ".validate": "!data.exists() || newData.exists()"
+          }
+        }
+      }
+    }
+  }
+}

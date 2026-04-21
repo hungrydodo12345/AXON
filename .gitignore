@@ -1,0 +1,32 @@
+# ── Environment ──
+.env
+.env.local
+.env.production
+bridge/.env
+
+# ── Node ──
+node_modules/
+bridge/node_modules/
+ui/node_modules/
+npm-debug.log*
+
+# ── Next.js ──
+ui/.next/
+ui/out/
+ui/.vercel/
+
+# ── WhatsApp session (never commit) ──
+bridge/.wwebjs_auth/
+bridge/.wwebjs_cache/
+
+# ── Firebase ──
+.firebase/
+firebase-debug.log
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── PWA generated files ──
+ui/public/sw.js
+ui/public/workbox-*.js
