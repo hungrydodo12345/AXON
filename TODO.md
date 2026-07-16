@@ -1,6 +1,6 @@
 # AXON — To-Do List
 
-Engineering backlog derived from the AXON PRD (v0.1), scoped against what this repo (a WhatsApp-bridge codebase, formerly "Neuro-Librarian") actually contains today. See `README.md` for how to run what's already working.
+Engineering backlog derived from the AXON PRD (v0.1), scoped against what this repo (formerly "Neuro-Librarian") actually contains today. See `README.md` for how to run what's already working.
 
 ## Done this session
 
@@ -23,14 +23,23 @@ Engineering backlog derived from the AXON PRD (v0.1), scoped against what this r
 - [x] Added Gemini as a second provider at the config layer (`getGeminiConfig`, `getActiveProvider`) — key acquisition + resolution only, not yet wired into inference (see below).
 - [x] Hardcoded a live Groq key as the trial fallback in `config.js` (`TRIAL_KEYS.GROQ_API_KEY`) at the user's explicit request, so the demo works with zero setup.
 
+## Done this session (round 3)
+
+- [x] **Removed the live WhatsApp bridge entirely** (`whatsapp-web.js`, `qrcode-terminal`, and 93 transitive packages including bundled Puppeteer). It was untested-working in this sandbox (`Could not find Chrome`, only kept from crashing the app by a defensive `.catch()`), required a QR-code-in-terminal login flow that's a bad fit for a double-click-launched app, and duplicated the user's own stated plan to treat WhatsApp as manual-import-only. See README "Why WhatsApp is manual-import-only" for the full reasoning.
+- [x] Refactored `librarian.js`'s WhatsApp-specific `processMessage()` into a generic `processIncomingMessage()` shared by every connector — this is now the one real entrypoint into triage/translation/memory/storage, independent of source platform.
+- [x] `connectors/whatsappImport.js` — parses real WhatsApp chat-export .txt (iOS `[bracket]` format, Android `dash -` format, multi-line messages, system-message filtering). Verified against sample exports of both formats.
+- [x] `connectors/emailImap.js` — live email via IMAP (Gmail/Outlook/365/Yahoo/iCloud, any provider, via app password — no OAuth app registration needed). Optional: no-ops cleanly if `EMAIL_IMAP_*` env vars aren't set; never crashes the app on connection failure.
+- [x] `POST /api/import/email/:userId` and `POST /api/import/whatsapp/:userId` — manual import endpoints, both auth-protected, both verified end-to-end via curl (profile → token → import → inbox hydrate all round-tripped correctly).
+- [x] `components/ImportPanel.jsx` — in-app UI (Import button in the inbox header) with two tabs: paste-an-email and paste-or-upload-a-WhatsApp-export.
+
 ## Known gaps (see README "What's NOT done yet")
 
 - [ ] Actual `.dmg`/`.exe` build has not been produced end-to-end (this dev sandbox has no network access to download Electron's platform binaries) — config is written and the underlying app is verified working, but `npm run dist:mac` / `dist:win` need to be run for real on a Mac / Windows machine (or CI) before distributing. Launcher scripts are the recommended path for now.
 - [ ] Code signing & notarization for both installers.
 - [ ] Real app icons (referenced but missing under `public/icons/`).
-- [ ] whatsapp-web.js bundles Puppeteer's own Chromium on top of Electron's — revisit bundle size before wide distribution.
 - [ ] Gemini inference wiring — `triage.js`, `translator.js`, `sarcasmEngine.js`, `responseGenerator.js`, `vectorStore.js` still call the Groq SDK directly instead of `config.js`'s `getActiveProvider()`.
 - [ ] `Launch-AXON.bat` is written but untested on an actual Windows machine (no Windows available in this dev sandbox) — the underlying `.env`/`AUTH_SECRET` generation logic was verified in isolation with equivalent shell logic, but not the batch file itself end-to-end.
+- [ ] `connectors/emailImap.js` is syntax-verified but not tested against a real IMAP server (no live mailbox credentials available in this dev sandbox) — the manual email import path (`POST /api/import/email`) is the one that's been fully verified end-to-end.
 - [ ] **Security**: rotate the Firebase service account key and `AUTH_SECRET` that were committed to git history in `.env`/`.env.local`/`.env-heh` before this session. (Groq key: user has said it's fine to keep using for the demo, and it's now also intentionally hardcoded as the trial fallback in `config.js` — not part of this rotation ask.)
 
 ## Dropped from this session's scope (explicitly deferred, not forgotten)
@@ -40,26 +49,25 @@ Engineering backlog derived from the AXON PRD (v0.1), scoped against what this r
 - [ ] Android standalone app (on-device vector DB + offline AI — a distinct, larger build, not a packaging variant)
 - [ ] Google Sign-In + cross-device encrypted sync
 
-## The larger PRD vision (not started — different scope than this codebase)
+## The larger PRD vision (partially started — connector list)
 
-The original AXON PRD describes a relationship-memory layer across Gmail/Slack/Discord/WhatsApp/iMessage with a Relationship Engine, semantic search, and a calm Reminder Engine. This repo currently implements one connector (WhatsApp) with message triage/translation/safety features, not the multi-platform relationship engine. If that's still the target, the prioritized connector list (per user direction) is:
+The original AXON PRD describes a relationship-memory layer across Gmail/Slack/Discord/WhatsApp/iMessage with a Relationship Engine, semantic search, and a calm Reminder Engine. Current connector status against the prioritized list:
 
 **Native integrations** (direct API, real-time):
-- [ ] Gmail
-- [ ] Outlook / Microsoft 365
+- [x] Email — via generic IMAP (`connectors/emailImap.js`); works with Gmail/Outlook/365/etc. today without per-provider OAuth setup
+- [ ] Gmail (OAuth-specific, richer than generic IMAP — labels, threading, etc.)
+- [ ] Outlook / Microsoft 365 (OAuth-specific, same rationale)
 - [ ] Slack
 - [ ] Discord
 
 **Manual imports** (no fighting platform restrictions):
-- [ ] WhatsApp (chat export)
+- [x] WhatsApp (chat export) — `connectors/whatsappImport.js` + in-app Import panel
+- [x] Email (paste) — same Import panel, `POST /api/import/email/:userId`
 - [ ] iMessage (manual import / macOS export)
-
-These six cover the large majority of personal + work communication without needing platform approval for API access that isn't realistically obtainable (iMessage has no public API; WhatsApp's official Business API isn't meant for personal accounts).
 
 Plus the surrounding engine work:
 
-- [ ] Define the common connector schema (sender, receiver, timestamp, platform, conversation_id, content, attachments, metadata)
-- [ ] Relationship Engine (timeline, contact profiles, commitments, summaries, interaction stats) — `memoryEngine.js`/`vectorStore.js` are a starting point but scoped to single-platform WhatsApp data today
+- [ ] Relationship Engine (timeline, contact profiles, commitments, summaries, interaction stats) — `memoryEngine.js`/`vectorStore.js` are a starting point but scoped to single-user data today, not cross-platform relationship modeling
 - [ ] Context Builder that assembles cross-platform relationship context for AI calls
 - [ ] Meaning-based semantic search across all connected platforms ("What did Morgan say about the repository?")
 - [ ] Reminder Engine that resurfaces context rather than issuing traditional reminders

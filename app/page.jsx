@@ -12,6 +12,7 @@ import { useEffect, useState, useCallback } from "react";
 import PileView from "../components/PileView";
 import GargoyleButton from "../components/GargoyleButton";
 import SensoryPanel from "../components/SensoryPanel";
+import ImportPanel from "../components/ImportPanel";
 
 const BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_URL || "http://localhost:3000";
 
@@ -22,6 +23,7 @@ export default function InboxPage() {
   const [messages, setMessages] = useState([]);
   const [nudges, setNudges] = useState([]);
   const [showSensory, setShowSensory] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [status, setStatus] = useState("loading"); // loading | ready | error | signed_out
 
   useEffect(() => {
@@ -94,6 +96,9 @@ export default function InboxPage() {
       <header style={styles.header}>
         <h1 style={styles.title}>AXON</h1>
         <div style={styles.headerActions}>
+          <button style={styles.iconBtn} onClick={() => setShowImport(true)}>
+            Import
+          </button>
           <button style={styles.iconBtn} onClick={() => setShowSensory(true)}>
             Sensory
           </button>
@@ -112,6 +117,14 @@ export default function InboxPage() {
       </main>
 
       {showSensory && <SensoryPanel onClose={() => setShowSensory(false)} />}
+      {showImport && (
+        <ImportPanel
+          userId={userId}
+          authToken={authToken}
+          onClose={() => setShowImport(false)}
+          onImported={() => loadState(userId, authToken)}
+        />
+      )}
     </div>
   );
 }

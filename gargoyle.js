@@ -7,9 +7,10 @@
  *   - Independent of all other systems
  *
  * Alert channels:
- *   1. WhatsApp (via whatsapp-web.js client)
- *   2. Email (via Resend API)
- *   3. Web Push (via web-push)
+ *   1. Email (via Resend API)
+ *   2. Web Push (via web-push)
+ *   (WhatsApp alerts are dormant — no live WhatsApp client anymore;
+ *    see connectors/ for the current message sources.)
  *
  * This module has ZERO dependencies on triage, translation, or constitution.
  * It operates as a standalone safety system.

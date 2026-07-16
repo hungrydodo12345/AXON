@@ -1,21 +1,28 @@
 # AXON
 
-A local-first personal cognitive layer — it remembers relationships, not just messages. Currently implemented as a WhatsApp bridge + local desktop app (Next.js UI wrapped in Electron), with everything stored on your machine.
+A local-first personal cognitive layer — it remembers relationships, not just messages. Local desktop app (Next.js UI wrapped in Electron) with everything stored on your machine.
 
 ---
 
 ## What's actually running here
 
 ```
-librarian.js        → Express bridge: WhatsApp listener, REST API, SSE stream
-localStore.js        → Local JSON-file datastore (replaces Firebase entirely)
-localSchema.js        → Schema + helpers on top of localStore.js
-app/                  → Next.js UI (onboarding + inbox)
-components/          → Inbox UI components (piles, message cards, sensory panel, panic button)
-electron/            → Desktop shell that wraps the bridge + UI in a native window
+librarian.js          → Express bridge: connector pipeline, REST API, SSE stream
+connectors/emailImap.js     → Live email connector (IMAP — Gmail, Outlook/365, etc.)
+connectors/whatsappImport.js → WhatsApp chat-export parser (manual import)
+localStore.js          → Local JSON-file datastore (replaces Firebase entirely)
+localSchema.js          → Schema + helpers on top of localStore.js
+app/                    → Next.js UI (onboarding + inbox)
+components/            → Inbox UI (piles, message cards, sensory panel, panic button, import panel)
+electron/              → Desktop shell that wraps the bridge + UI in a native window
 ```
 
-No Firebase, no external account, no cloud database. Your profile, messages, embeddings, and settings live in a single JSON file under `data/` on your machine (see `AXON_DATA_DIR` below).
+No Firebase, no external account, no cloud database. Your profile, messages, embeddings, and settings live in a single JSON file under `data/` on your machine.
+
+**Message sources today:**
+- **Email** — live via IMAP (optional, set `EMAIL_IMAP_*` in `.env`) or manual paste (Import → Email in the app, works with zero setup)
+- **WhatsApp** — manual import only. WhatsApp has no personal-account API; a live bridge (`whatsapp-web.js`, driving WhatsApp Web via headless Chromium + QR login) was tried and removed — see **Why WhatsApp is manual-import-only** below. Export a chat from WhatsApp ("Export Chat" → without media) and import the .txt via Import → WhatsApp export in the app.
+- Gmail/Outlook/Slack/Discord native connectors: not built yet — see `TODO.md`.
 
 ---
 
@@ -74,6 +81,18 @@ Neither installer is code-signed. Unsigned builds will trigger a Gatekeeper/Smar
 
 ---
 
+## Why WhatsApp is manual-import-only
+
+There's no public API for personal WhatsApp accounts. The only way to get live messages is `whatsapp-web.js`, which puppets WhatsApp Web through a headless Chromium browser and requires scanning a QR code. In this codebase that meant:
+
+- **Puppeteer's Chromium isn't bundled** — it downloads on first run (large, and the QR code needed to authorize it printed to a terminal window, a bad experience for anyone not comfortable with a terminal).
+- **It was already broken in this sandbox** — `whatsapp.initialize()` failed outright (`Could not find Chrome`) every time it was tested here, and was only kept from crashing the whole app by a `.catch()` added defensively.
+- **It duplicates your own connector plan** — your own connector list already scopes WhatsApp as "Manual Imports: chat export," not a live integration.
+
+Given all three, the live bridge was removed rather than patched. `connectors/whatsappImport.js` now parses a real WhatsApp chat-export .txt (both iOS `[bracket]` and Android `dash -` formats, multi-line messages, system-message filtering) and feeds it through the exact same pipeline as everything else. If a live WhatsApp connection becomes a hard requirement later, re-adding `whatsapp-web.js` is straightforward — the pipeline it needs to call into (`processIncomingMessage` in `librarian.js`) is now a stable, general entrypoint rather than WhatsApp-specific code.
+
+---
+
 ## Trial key (zero-setup first run / demo)
 
 `config.js` resolves the Groq key in this order: **user-provided key → `GROQ_API_KEY` env var → hardcoded `TRIAL_KEYS.GROQ_API_KEY`**. That hardcoded fallback is currently a live Groq key (set at the user's explicit request, for demo purposes) — anyone running this code gets working AI out of the box with zero setup. Swap it for your own key (or blank it out) before any real/production distribution; it's a demo convenience, not a secret-management strategy.
@@ -89,8 +108,9 @@ Being upfront about the gap between "runs today" and "a real product":
 - **Google Sign-In / cross-device encrypted sync** — not started. `TRIAL_KEYS`/BYOK exists for AI providers only; there's no account system or sync protocol yet.
 - **Code signing & notarization** for the Mac/Windows installers — not set up; builds will show OS security warnings.
 - **App icons** — `manifest.json`/`layout.jsx` reference `/icons/icon-192.png` etc. that don't exist yet; add real icon files under `public/icons/`.
-- **whatsapp-web.js + Puppeteer bundle size** — packaging Chromium (via Puppeteer) inside an Electron app (which already ships its own Chromium) will produce a large installer. Worth revisiting — e.g. pointing Puppeteer at Electron's own Chromium — before wide distribution.
-- The original relationship-memory/multi-connector vision from the AXON PRD (Gmail/Slack connectors, semantic search across platforms, reminder engine) is a different, larger scope than this WhatsApp-bridge codebase currently covers — see `TODO.md`. The prioritized connector list is: native (Gmail, Outlook/Microsoft 365, Slack, Discord) + manual import (WhatsApp chat export, iMessage macOS export) — deliberately skipping the platforms that fight you on API access.
+- **Gmail/Outlook/Slack/Discord native connectors** — not built. Email works today via generic IMAP (no OAuth app registration needed) or manual paste; the other three need real OAuth/bot-token integrations, tracked in `TODO.md`.
+- **iMessage import** — not built (no live connector possible either; Apple has no API for it).
+- The original relationship-memory/multi-connector vision from the AXON PRD (semantic search across platforms, reminder engine, relationship timeline) is a different, larger scope than this codebase currently covers — see `TODO.md`.
 - **Gemini inference wiring** — key acquisition works (`npm run setup:key`), but `triage.js`/`translator.js`/`sarcasmEngine.js`/`responseGenerator.js`/`vectorStore.js` still call the Groq SDK directly rather than routing through `config.js`'s `getActiveProvider()`.
 
 ---

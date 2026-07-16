@@ -16,8 +16,6 @@
     "dist": "npm run next:build && electron-builder --mac --win"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.26.0",
-    "qrcode-terminal": "^0.12.0",
     "groq-sdk": "^0.5.0",
     "dotenv": "^16.4.0",
     "express": "^4.18.0",
@@ -30,7 +28,9 @@
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "next-pwa": "^5.6.0"
+    "next-pwa": "^5.6.0",
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.1"
   },
   "devDependencies": {
     "electron": "^31.0.0",
@@ -47,6 +47,7 @@
     },
     "files": [
       "electron/**/*",
+      "connectors/**/*",
       "librarian.js",
       "localStore.js",
       "localSchema.js",
