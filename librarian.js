@@ -1,5 +1,5 @@
 /**
- * librarian.js — Main WhatsApp Bridge (Librarian)
+ * librarian.js — AXON Bridge
  *
  * Message processing order (NON-NEGOTIABLE):
  *   0. DEDUPLICATION CHECK — skip already-processed messages
@@ -11,28 +11,33 @@
  *   6. Store processed message
  *   7. Emit to PWA via Express SSE
  *
+ * Sources feeding this pipeline today:
+ *   - Email (IMAP, live poll) — see connectors/emailImap.js
+ *   - Manual import: email paste, WhatsApp chat-export paste — POST /api/import/*
+ *
  * Security:
  *   - Auth: HMAC token verification on all endpoints
  *   - CORS: restricted to ALLOWED_ORIGINS only
  *   - Rate limiting: per-IP general + per-endpoint specific
  *
- * Reliability:
- *   - WhatsApp auto-reconnection with exponential backoff
- *   - SSE heartbeat every 30s (prevents proxy timeouts)
- *   - Message deduplication (10-min TTL in-memory cache)
- *   - Groq retry logic (handled in triage.js)
- *
  * Constitutional compliance:
  *   - SAFETY_BYPASS: Safety word is FIRST meaningful check
- *   - PRIVACY_ABSOLUTE: all data in user's Firestore
+ *   - PRIVACY_ABSOLUTE: all data stays in the local datastore
  *   - BYOK: keys resolved per-user
  */
 
-const { Client, LocalAuth } = require("whatsapp-web.js");
-const qrcode = require("qrcode-terminal");
 const express = require("express");
 const { validateBootConfig } = require("./config");
-const { initFirebase, getProfile, saveMessage, upsertProfile } = require("./localSchema");
+const {
+  initFirebase,
+  getDb,
+  getProfile,
+  saveMessage,
+  upsertProfile,
+  upsertContact,
+  getContact,
+  getContacts,
+} = require("./localSchema");
 const { detectSafetyWord, executeGargoyleProtocol, getGroundingPrompt } = require("./gargoyle");
 const { resolveConstitution } = require("./constitutionEngine");
 const { triageMessage } = require("./triage");
@@ -42,13 +47,17 @@ const { translateMessage } = require("./translator");
 const { generateTrinity } = require("./responseGenerator");
 const { processMessageIntoMemory } = require("./memoryEngine");
 const { trackWordFrequency, proposeGraduation } = require("./growthTracker");
+const { startEmailImapConnector } = require("./connectors/emailImap");
+const { parseWhatsAppExport } = require("./connectors/whatsappImport");
+const { startGmailConnector } = require("./connectors/gmailApi");
+const { getUpcomingEvents } = require("./connectors/googleCalendar");
 const {
   applySecurityMiddleware,
   authMiddleware,
   getGargoyleLimiter,
   getSseLimiter,
   generateToken,
-} = require("./middleware");
+} = require("./bridgeSecurity");
 
 // ============================================================
 // BOOT VALIDATION
@@ -57,7 +66,7 @@ const {
 const bootCheck = validateBootConfig();
 if (!bootCheck.valid) {
   console.error("╔══════════════════════════════════════════╗");
-  console.error("║  NEURO-LIBRARIAN — BOOT FAILED           ║");
+  console.error("║  AXON — BOOT FAILED                       ║");
   console.error("╠══════════════════════════════════════════╣");
   for (const err of bootCheck.errors) {
     console.error(`║  ${err}`);
@@ -75,10 +84,12 @@ const db = initFirebase();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const sseClients = new Map();
+let emailConnectorStatus = "not_configured";
+let gmailConnectorStatus = "not_configured";
 
 // Apply security middleware (helmet, CORS, rate limit)
 applySecurityMiddleware(app);
-app.use(express.json());
+app.use(express.json({ limit: "5mb" })); // chat exports can be sizeable
 
 // ============================================================
 // MESSAGE DEDUPLICATION (Fix #15)
@@ -109,7 +120,8 @@ setInterval(() => {
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
-    whatsapp: whatsapp.info ? "connected" : "disconnected",
+    email_connector: emailConnectorStatus,
+    gmail_connector: gmailConnectorStatus,
     uptime: process.uptime(),
   });
 });
@@ -162,7 +174,6 @@ app.post("/gargoyle/:userId", getGargoyleLimiter(), authMiddleware, async (req, 
       triggerSource: "pwa",
       messageContext: "Panic button pressed via PWA",
       location: req.body.location || null,
-      whatsappClient: whatsapp,
     });
 
     const constitution = resolveConstitution(profile);
@@ -178,6 +189,80 @@ app.post("/gargoyle/:userId", getGargoyleLimiter(), authMiddleware, async (req, 
   } catch (err) {
     console.error("[GARGOYLE API] Error:", err);
     res.status(500).json({ error: "Gargoyle execution failed" });
+  }
+});
+
+// Hydrate the inbox on load: profile, resolved constitution, and message history.
+app.get("/api/state/:userId", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const profile = await getProfile(userId);
+    if (!profile) return res.status(404).json({ error: "User not found. Complete onboarding first." });
+
+    const constitution = resolveConstitution(profile);
+    const snapshot = await getDb()
+      .collection("users")
+      .doc(userId)
+      .collection("messages")
+      .orderBy("created_at", "desc")
+      .limit(200)
+      .get();
+
+    const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const contacts = await getContacts(userId);
+
+    res.json({ profile, constitution, messages, contacts });
+  } catch (err) {
+    console.error("[STATE API] Error:", err);
+    res.status(500).json({ error: "Failed to load inbox state" });
+  }
+});
+
+// List people/relationships
+app.get("/api/contacts/:userId", authMiddleware, async (req, res) => {
+  try {
+    const contacts = await getContacts(req.params.userId);
+    res.json({ contacts });
+  } catch (err) {
+    console.error("[CONTACTS API] Error:", err);
+    res.status(500).json({ error: "Failed to load contacts" });
+  }
+});
+
+// Upcoming Google Calendar events — requires `npm run connect:google` first.
+app.get("/api/calendar/:userId", authMiddleware, async (req, res) => {
+  try {
+    const events = await getUpcomingEvents();
+    if (events === null) {
+      return res.status(404).json({ error: "Google Calendar isn't connected. Run `npm run connect:google`." });
+    }
+    res.json({ events });
+  } catch (err) {
+    console.error("[CALENDAR API] Error:", err);
+    res.status(500).json({ error: "Failed to load calendar events" });
+  }
+});
+
+// Add or edit a person's relationship info — name, relationship, notes,
+// work/personal category, bucket. Works for a brand-new person (nobody's
+// messaged yet) just as well as editing someone auto-created from an
+// imported message.
+app.post("/api/contacts/:userId/:contactId", authMiddleware, async (req, res) => {
+  try {
+    const { display_name, relationship_context, notes, category, bucket } = req.body;
+    const update = {};
+    if (display_name !== undefined) update.display_name = display_name;
+    if (relationship_context !== undefined) update.relationship_context = relationship_context;
+    if (notes !== undefined) update.notes = notes;
+    if (category !== undefined) update.category = category;
+    if (bucket !== undefined) update.bucket = bucket;
+
+    await upsertContact(req.params.userId, req.params.contactId, update);
+    const contact = await getContact(req.params.userId, req.params.contactId);
+    res.json({ success: true, contact });
+  } catch (err) {
+    console.error("[CONTACTS API] Error:", err);
+    res.status(500).json({ error: "Failed to save contact" });
   }
 });
 
@@ -212,91 +297,99 @@ app.post("/auth/token", async (req, res) => {
   }
 });
 
+// ── Manual import: paste a single email in ──
+app.post("/api/import/email/:userId", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const { from, subject, body, date } = req.body;
+
+    if (!body) return res.status(400).json({ error: "body required" });
+
+    await processIncomingMessage({
+      platform: "email",
+      userId,
+      senderId: from || "unknown@sender",
+      senderName: from || "Unknown sender",
+      messageText: subject ? `${subject}\n\n${body}` : body,
+      messageId: `email_manual_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      isGroup: false,
+      timestamp: date ? new Date(date) : new Date(),
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[IMPORT EMAIL] Error:", err);
+    res.status(500).json({ error: "Email import failed" });
+  }
+});
+
+// ── Manual import: paste an exported WhatsApp chat in (.txt export format) ──
+app.post("/api/import/whatsapp/:userId", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const { chatText } = req.body;
+
+    if (!chatText) return res.status(400).json({ error: "chatText required" });
+
+    const parsed = parseWhatsAppExport(chatText);
+    if (parsed.length === 0) {
+      return res.status(400).json({ error: "Couldn't parse any messages from that export. Expected WhatsApp's standard 'chat export' .txt format." });
+    }
+
+    let imported = 0;
+    for (const msg of parsed) {
+      await processIncomingMessage({
+        platform: "whatsapp_import",
+        userId,
+        senderId: msg.sender,
+        senderName: msg.sender,
+        messageText: msg.text,
+        messageId: `wa_import_${msg.timestamp?.getTime() || Date.now()}_${imported}`,
+        isGroup: false,
+        timestamp: msg.timestamp || new Date(),
+      });
+      imported++;
+    }
+
+    res.json({ success: true, imported });
+  } catch (err) {
+    console.error("[IMPORT WHATSAPP] Error:", err);
+    res.status(500).json({ error: "WhatsApp import failed" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`[LIBRARIAN] Express server on port ${PORT}`);
 });
 
 // ============================================================
-// WHATSAPP CLIENT (with auto-reconnection — Fix #9)
+// CORE PIPELINE — shared by every connector (email, manual imports, ...)
 // ============================================================
 
-const whatsapp = new Client({
-  authStrategy: new LocalAuth(),
-  puppeteer: {
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  },
-});
-
-whatsapp.on("qr", (qr) => {
-  console.log("[LIBRARIAN] Scan QR code to connect WhatsApp:");
-  qrcode.generate(qr, { small: true });
-});
-
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 10;
-const RECONNECT_BASE_DELAY = 5000;
-
-whatsapp.on("ready", () => {
-  reconnectAttempts = 0; // Reset on successful connection
-  console.log("╔══════════════════════════════════════════╗");
-  console.log("║  NEURO-LIBRARIAN — BRIDGE ONLINE          ║");
-  console.log("║  WhatsApp: CONNECTED                      ║");
-  console.log("║  Safety Word: ACTIVE                      ║");
-  console.log("║  Triage: READY                             ║");
-  console.log("║  WUPHF Nudges: ACTIVE                     ║");
-  console.log("║  Security: AUTH + CORS + RATE LIMIT        ║");
-  console.log("║  Deduplication: ACTIVE                     ║");
-  console.log("╚══════════════════════════════════════════╝");
-
-  startWuphfScheduler(emitToUser);
-});
-
-whatsapp.on("auth_failure", (msg) => {
-  console.error("[LIBRARIAN] WhatsApp auth failed:", msg);
-});
-
-whatsapp.on("disconnected", (reason) => {
-  console.warn("[LIBRARIAN] WhatsApp disconnected:", reason);
-
-  if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-    reconnectAttempts++;
-    const delay = RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1);
-    console.log(`[LIBRARIAN] Reconnecting in ${delay / 1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
-
-    setTimeout(() => {
-      whatsapp.initialize().catch((err) => {
-        console.error("[LIBRARIAN] Reconnection failed:", err.message);
-      });
-    }, delay);
-  } else {
-    console.error("[LIBRARIAN] Max reconnect attempts reached. Manual restart required.");
-    emitToAllUsers({
-      type: "system_error",
-      message: "WhatsApp connection lost. Service restart needed.",
-    });
-  }
-});
-
-// ============================================================
-// MESSAGE LISTENER — CORE PIPELINE
-// ============================================================
-
-whatsapp.on("message", async (message) => {
-  try {
-    await processMessage(message);
-  } catch (err) {
-    console.error("[LIBRARIAN] Unhandled error:", err);
-  }
-});
-
-async function processMessage(message) {
-  const userPhone = message.to;
-  const senderPhone = message.from;
-  const messageText = message.body || "";
-  const messageId = message.id?._serialized || `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  const isGroup = message.from.includes("@g.us");
-
+/**
+ * Run one incoming message through the full AXON pipeline: safety check,
+ * triage, tone/translation, response generation, memory, storage, emit.
+ *
+ * @param {object} params
+ * @param {string} params.platform — "email" | "whatsapp_import" | ...
+ * @param {string} params.userId — the AXON account this message belongs to
+ * @param {string} params.senderId — sender identifier (email address, contact name, phone, ...)
+ * @param {string} params.senderName — human-readable sender label
+ * @param {string} params.messageText
+ * @param {string} params.messageId
+ * @param {boolean} params.isGroup
+ * @param {Date} params.timestamp
+ */
+async function processIncomingMessage({
+  platform,
+  userId,
+  senderId,
+  senderName,
+  messageText,
+  messageId,
+  isGroup = false,
+  timestamp = new Date(),
+}) {
   // ── STEP 0: DEDUPLICATION ──
   if (isDuplicate(messageId)) {
     console.log(`[LIBRARIAN] Duplicate skipped: ${messageId}`);
@@ -304,24 +397,23 @@ async function processMessage(message) {
   }
 
   // ── STEP 1: SAFETY WORD CHECK (BEFORE ANYTHING) ──
-  const profile = await getProfile(userPhone);
+  const profile = await getProfile(userId);
 
   if (profile && profile.safety_word) {
     if (detectSafetyWord(messageText, profile.safety_word)) {
-      console.warn(`[GARGOYLE] Safety word triggered for ${userPhone}`);
+      console.warn(`[GARGOYLE] Safety word triggered for ${userId}`);
 
       const gargoyleResult = await executeGargoyleProtocol({
-        userId: userPhone,
+        userId,
         userProfile: profile,
         triggerType: "safety_word",
-        triggerSource: "whatsapp",
-        messageContext: `Safety word from ${senderPhone}`,
+        triggerSource: platform,
+        messageContext: `Safety word from ${senderId}`,
         location: null,
-        whatsappClient: whatsapp,
       });
 
       const constitution = resolveConstitution(profile);
-      emitToUser(userPhone, {
+      emitToUser(userId, {
         type: "gargoyle_activated",
         grounding: getGroundingPrompt(constitution),
         cooldown: gargoyleResult.cooldown || false,
@@ -334,19 +426,29 @@ async function processMessage(message) {
 
   // ── STEP 2: PROFILE + CONSTITUTION ──
   if (!profile) {
-    emitToUser(userPhone, {
+    emitToUser(userId, {
       type: "unregistered",
-      message: "Set up your profile to start using Neuro-Librarian.",
+      message: "Set up your profile to start using AXON.",
     });
     return;
   }
 
   const constitution = resolveConstitution(profile);
 
+  // ── STEP 2b: CONTACT / RELATIONSHIP (effortless — auto-created, never overwrites a name you've already set) ──
+  const existingContact = await getContact(userId, senderId).catch(() => null);
+  const resolvedSenderName = existingContact?.display_name || senderName;
+
+  upsertContact(userId, senderId, {
+    display_name: existingContact?.display_name || senderName,
+    last_message_at: timestamp.toISOString(),
+    message_count: (existingContact?.message_count || 0) + 1,
+  }).catch((err) => console.error("[LIBRARIAN] Contact touch failed:", err.message));
+
   // ── STEP 3: TRIAGE ──
   const triageResult = await triageMessage({
     messageText,
-    senderPhone,
+    senderPhone: senderId,
     isGroup,
     contactBuckets: profile.contact_buckets,
     constitution,
@@ -390,18 +492,18 @@ async function processMessage(message) {
 
   // ── STEP 5e: VOCAB TRACKING + GRADUATION PROPOSALS (non-blocking) ──
   Promise.allSettled([
-    trackWordFrequency(userPhone, messageText),
+    trackWordFrequency(userId, messageText),
     ...(profile.vocab_mode === "expand"
       ? extractNewWords(messageText, profile.restricted_vocab || []).map((word) =>
-          proposeGraduation(userPhone, word, messageText.substring(0, 100))
+          proposeGraduation(userId, word, messageText.substring(0, 100))
         )
       : []),
   ]).catch((err) => console.error("[LIBRARIAN] Vocab tracking error:", err.message));
 
   // ── STEP 5f: MEMORY LAYER (non-blocking) ──
   processMessageIntoMemory({
-    userId: userPhone,
-    message: { id: messageId, from: senderPhone, original_text: messageText },
+    userId,
+    message: { id: messageId, from: senderId, original_text: messageText },
     toneAnalysis,
     triageResult,
     userKeys: profile.user_keys,
@@ -410,8 +512,10 @@ async function processMessage(message) {
   // ── STEP 6: STORE ──
   const processedMessage = {
     id: messageId,
-    from: senderPhone,
-    to: userPhone,
+    platform,
+    from: senderId,
+    from_name: resolvedSenderName,
+    to: userId,
     original_text: messageText,
     translated_text: translation.translated,
     translation_ok: translation.simplified_ok,
@@ -437,19 +541,20 @@ async function processMessage(message) {
     content_warning: contentWarning,
     action_items: triageResult.actionItems || [],
     summary: triageResult.summary,
+    occurred_at: timestamp.toISOString(),
   };
 
-  await saveMessage(userPhone, processedMessage);
+  await saveMessage(userId, processedMessage);
 
   // ── STEP 7: EMIT ──
-  emitToUser(userPhone, {
+  emitToUser(userId, {
     type: "new_message",
     pile: triageResult.pile,
     message: processedMessage,
   });
 
   console.log(
-    `[LIBRARIAN] ${senderPhone} → ${userPhone} | ${triageResult.pile} | events:${calendarEvents.length}`
+    `[LIBRARIAN] [${platform}] ${senderId} → ${userId} | ${triageResult.pile} | events:${calendarEvents.length}`
   );
 }
 
@@ -522,6 +627,28 @@ function emitToAllUsers(data) {
 // START
 // ============================================================
 
-whatsapp.initialize();
+startWuphfScheduler(emitToUser);
 
-module.exports = { app, whatsapp, emitToUser };
+// Live email connector — only starts if EMAIL_IMAP_* env vars are set.
+// Non-fatal if absent/misconfigured: manual import + everything else
+// keeps working either way.
+startEmailImapConnector({
+  onMessage: processIncomingMessage,
+  onStatusChange: (status) => { emailConnectorStatus = status; },
+}).catch((err) => {
+  emailConnectorStatus = "error";
+  console.error("[LIBRARIAN] Email connector failed to start:", err.message);
+});
+
+// Live Gmail connector (Gmail API via OAuth) — only starts if Google
+// credentials from `npm run connect:google` are present. Non-fatal
+// either way.
+startGmailConnector({
+  onMessage: processIncomingMessage,
+  onStatusChange: (status) => { gmailConnectorStatus = status; },
+}).catch((err) => {
+  gmailConnectorStatus = "error";
+  console.error("[LIBRARIAN] Gmail connector failed to start:", err.message);
+});
+
+module.exports = { app, emitToUser, processIncomingMessage };

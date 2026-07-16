@@ -12,6 +12,8 @@ import { useEffect, useState, useCallback } from "react";
 import PileView from "../components/PileView";
 import GargoyleButton from "../components/GargoyleButton";
 import SensoryPanel from "../components/SensoryPanel";
+import ImportPanel from "../components/ImportPanel";
+import PeoplePanel from "../components/PeoplePanel";
 
 const BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_URL || "http://localhost:3000";
 
@@ -20,8 +22,11 @@ export default function InboxPage() {
   const [authToken, setAuthToken] = useState(null);
   const [constitution, setConstitution] = useState({});
   const [messages, setMessages] = useState([]);
+  const [contacts, setContacts] = useState([]);
   const [nudges, setNudges] = useState([]);
   const [showSensory, setShowSensory] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [showPeople, setShowPeople] = useState(false);
   const [status, setStatus] = useState("loading"); // loading | ready | error | signed_out
 
   useEffect(() => {
@@ -46,6 +51,7 @@ export default function InboxPage() {
       const data = await res.json();
       setConstitution(data.constitution || {});
       setMessages(data.messages || []);
+      setContacts(data.contacts || []);
       setStatus("ready");
     } catch (err) {
       console.error("[AXON] Failed to load state:", err);
@@ -94,6 +100,12 @@ export default function InboxPage() {
       <header style={styles.header}>
         <h1 style={styles.title}>AXON</h1>
         <div style={styles.headerActions}>
+          <button style={styles.iconBtn} onClick={() => setShowPeople(true)}>
+            People
+          </button>
+          <button style={styles.iconBtn} onClick={() => setShowImport(true)}>
+            Import
+          </button>
           <button style={styles.iconBtn} onClick={() => setShowSensory(true)}>
             Sensory
           </button>
@@ -112,6 +124,23 @@ export default function InboxPage() {
       </main>
 
       {showSensory && <SensoryPanel onClose={() => setShowSensory(false)} />}
+      {showImport && (
+        <ImportPanel
+          userId={userId}
+          authToken={authToken}
+          onClose={() => setShowImport(false)}
+          onImported={() => loadState(userId, authToken)}
+        />
+      )}
+      {showPeople && (
+        <PeoplePanel
+          userId={userId}
+          authToken={authToken}
+          contacts={contacts}
+          onClose={() => setShowPeople(false)}
+          onChanged={() => loadState(userId, authToken)}
+        />
+      )}
     </div>
   );
 }

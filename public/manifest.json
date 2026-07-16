@@ -1,7 +1,7 @@
 {
-  "name": "Neuro-Librarian",
-  "short_name": "NLibrarian",
-  "description": "Social Translation Layer and Executive Function Buffer",
+  "name": "AXON",
+  "short_name": "AXON",
+  "description": "Local-first personal cognitive layer — remembers relationships, not just messages.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a1a1a",

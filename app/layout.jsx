@@ -8,16 +8,21 @@
 import "../styles/globals.css";
 
 export const metadata = {
-  title: "Neuro-Librarian",
-  description: "Your social translation layer",
+  title: "AXON",
+  description: "Your local-first relationship memory layer",
   manifest: "/manifest.json",
-  themeColor: "#1a1a1a",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Neuro-Librarian",
+    title: "AXON",
   },
+};
+
+export const viewport = {
+  themeColor: "#1a1a1a",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({ children }) {

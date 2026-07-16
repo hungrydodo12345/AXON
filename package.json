@@ -1,16 +1,22 @@
 {
-  "name": "neuro-librarian",
-  "version": "1.0.0",
-  "description": "Social Translation Layer and Executive Function Buffer for neurodivergent users",
-  "main": "librarian.js",
+  "name": "axon",
+  "version": "0.1.0",
+  "description": "AXON — a local-first personal cognitive layer that remembers relationships, not just messages.",
+  "main": "electron/main.js",
   "scripts": {
     "start": "node librarian.js",
-    "dev": "node --watch librarian.js"
+    "dev": "node --watch librarian.js",
+    "next:dev": "next dev -p 3001",
+    "next:build": "next build",
+    "next:start": "next start -p 3001",
+    "electron:dev": "electron .",
+    "setup:key": "node scripts/setup-api-key.js",
+    "connect:google": "node scripts/connect-google.js",
+    "dist:mac": "npm run next:build && electron-builder --mac",
+    "dist:win": "npm run next:build && electron-builder --win",
+    "dist": "npm run next:build && electron-builder --mac --win"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.26.0",
-    "qrcode-terminal": "^0.12.0",
-    "firebase-admin": "^12.0.0",
     "groq-sdk": "^0.5.0",
     "dotenv": "^16.4.0",
     "express": "^4.18.0",
@@ -19,9 +25,66 @@
     "helmet": "^7.1.0",
     "cors": "^2.8.5",
     "express-rate-limit": "^7.2.0",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "next-pwa": "^5.6.0",
+    "imapflow": "^1.0.164",
+    "mailparser": "^3.7.1",
+    "googleapis": "^140.0.1"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.0"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "build": {
+    "appId": "com.axon.app",
+    "productName": "AXON",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "connectors/**/*",
+      "librarian.js",
+      "localStore.js",
+      "localSchema.js",
+      "config.js",
+      "constitutionEngine.js",
+      "constitutions.js",
+      "bridgeSecurity.js",
+      "gargoyle.js",
+      "growthTracker.js",
+      "memoryEngine.js",
+      "onboardingQuestions.js",
+      "responseGenerator.js",
+      "sarcasmEngine.js",
+      "translator.js",
+      "triage.js",
+      "vectorStore.js",
+      "wuphf.js",
+      "next.config.js",
+      "package.json",
+      ".next/**/*",
+      "public/**/*"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

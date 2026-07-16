@@ -38,16 +38,20 @@ function generateToken(userId) {
 
 /**
  * Verify a request's auth token.
- * Expects header: Authorization: Bearer <token>
+ * Expects header: Authorization: Bearer <token>, or (SSE only, since
+ * EventSource can't set custom headers) a `?token=` query param.
  * Token must match HMAC(userId from URL, AUTH_SECRET).
  */
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const token = authHeader?.startsWith("Bearer ")
+    ? authHeader.split(" ")[1]
+    : req.query.token;
+
+  if (!token) {
     return res.status(401).json({ error: "Missing or invalid Authorization header." });
   }
 
-  const token = authHeader.split(" ")[1];
   const userId = req.params.userId;
 
   if (!userId) {
