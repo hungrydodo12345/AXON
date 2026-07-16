@@ -10,6 +10,7 @@
     "next:build": "next build",
     "next:start": "next start -p 3001",
     "electron:dev": "electron .",
+    "setup:key": "node scripts/setup-api-key.js",
     "dist:mac": "npm run next:build && electron-builder --mac",
     "dist:win": "npm run next:build && electron-builder --win",
     "dist": "npm run next:build && electron-builder --mac --win"

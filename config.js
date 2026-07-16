@@ -16,6 +16,7 @@ require("dotenv").config();
 
 const REQUIRED_KEYS = {
   groq: ["GROQ_API_KEY"],
+  gemini: ["GEMINI_API_KEY"],
   resend: ["RESEND_API_KEY", "RESEND_FROM_EMAIL"],
   vapid: ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"],
 };
@@ -23,14 +24,17 @@ const REQUIRED_KEYS = {
 // ============================================================
 // TRIAL KEYS
 //
-// Hardcoded fallback keys for a zero-setup first run, so a
-// non-technical user can download AXON and use it immediately
-// without creating any accounts. Intended for the initial trial
-// only — swap TRIAL_KEYS.GROQ_API_KEY for your own key before
-// any real/production distribution.
+// Hardcoded fallback keys for a zero-setup first run/demo, so
+// anyone can download AXON and use it immediately without
+// creating any accounts. Swap these for your own keys before any
+// real/production distribution — this is a demo convenience, not
+// a production secret-management strategy.
 // ============================================================
 const TRIAL_KEYS = {
-  GROQ_API_KEY: process.env.AXON_TRIAL_GROQ_API_KEY || "", // ← paste trial key here or set AXON_TRIAL_GROQ_API_KEY
+  GROQ_API_KEY:
+    process.env.AXON_TRIAL_GROQ_API_KEY ||
+    "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",
+  GEMINI_API_KEY: process.env.AXON_TRIAL_GEMINI_API_KEY || "",
 };
 
 /**
@@ -111,6 +115,34 @@ function getGroqConfig(userConfig = null) {
 }
 
 /**
+ * Get Gemini config for a specific user.
+ * @param {object|null} userConfig
+ * @returns {{ apiKey: string, model: string }}
+ */
+function getGeminiConfig(userConfig = null) {
+  const keys = resolveGroup("gemini", userConfig);
+  return {
+    apiKey: keys.GEMINI_API_KEY,
+    model: process.env.GEMINI_MODEL || "gemini-1.5-flash",
+  };
+}
+
+/**
+ * Resolve whichever AI provider has a usable key right now, preferring
+ * Groq (already wired into triage/translate/memory) and falling back
+ * to Gemini if only that key is configured.
+ * @param {object|null} userConfig
+ * @returns {{ provider: "groq"|"gemini", apiKey: string }}
+ */
+function getActiveProvider(userConfig = null) {
+  try {
+    return { provider: "groq", ...getGroqConfig(userConfig) };
+  } catch {
+    return { provider: "gemini", ...getGeminiConfig(userConfig) };
+  }
+}
+
+/**
  * Get Resend (email) config.
  * @param {object|null} userConfig
  * @returns {{ apiKey: string, fromEmail: string }}
@@ -143,8 +175,17 @@ function getVapidConfig() {
  */
 function validateBootConfig() {
   const errors = [];
+  const providerErrors = [];
 
-  try { resolveGroup("groq"); } catch (e) { errors.push(e.message); }
+  try { resolveGroup("groq"); } catch (e) { providerErrors.push(e.message); }
+  try { resolveGroup("gemini"); } catch (e) { providerErrors.push(e.message); }
+
+  if (providerErrors.length === 2) {
+    errors.push(
+      "[CONFIG FATAL] No usable AI provider key found (checked Groq and Gemini). " +
+      "Run `npm run setup:key` or set GROQ_API_KEY / GEMINI_API_KEY in .env."
+    );
+  }
 
   // Resend and VAPID are optional at boot (WUPHF layer)
   return {
@@ -157,6 +198,8 @@ module.exports = {
   resolveKey,
   resolveGroup,
   getGroqConfig,
+  getGeminiConfig,
+  getActiveProvider,
   getResendConfig,
   getVapidConfig,
   validateBootConfig,
