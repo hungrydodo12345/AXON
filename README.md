@@ -9,20 +9,25 @@ A local-first personal cognitive layer — it remembers relationships, not just 
 ```
 librarian.js          → Express bridge: connector pipeline, REST API, SSE stream
 connectors/emailImap.js     → Live email connector (IMAP — Gmail, Outlook/365, etc.)
+connectors/gmailApi.js      → Live Gmail connector (Gmail API, OAuth)
+connectors/googleCalendar.js → Google Calendar read access
 connectors/whatsappImport.js → WhatsApp chat-export parser (manual import)
 localStore.js          → Local JSON-file datastore (replaces Firebase entirely)
-localSchema.js          → Schema + helpers on top of localStore.js
+localSchema.js          → Schema + helpers on top of localStore.js (profiles, messages, contacts)
 app/                    → Next.js UI (onboarding + inbox)
-components/            → Inbox UI (piles, message cards, sensory panel, panic button, import panel)
+components/            → Inbox UI (piles, message cards, sensory panel, panic button, import panel, people panel)
 electron/              → Desktop shell that wraps the bridge + UI in a native window
 ```
 
-No Firebase, no external account, no cloud database. Your profile, messages, embeddings, and settings live in a single JSON file under `data/` on your machine.
+No Firebase, no external account, no cloud database. Your profile, messages, embeddings, contacts, and settings live in a single JSON file under `data/` on your machine.
 
 **Message sources today:**
-- **Email** — live via IMAP (optional, set `EMAIL_IMAP_*` in `.env`) or manual paste (Import → Email in the app, works with zero setup)
+- **Email** — live via generic IMAP (optional, set `EMAIL_IMAP_*` in `.env`), live via the real Gmail API (`npm run connect:google` — see tutorial below), or manual paste (Import → Email in the app, works with zero setup)
+- **Calendar** — read-only, via `npm run connect:google` (same OAuth as Gmail) — `GET /api/calendar/:userId`
 - **WhatsApp** — manual import only. WhatsApp has no personal-account API; a live bridge (`whatsapp-web.js`, driving WhatsApp Web via headless Chromium + QR login) was tried and removed — see **Why WhatsApp is manual-import-only** below. Export a chat from WhatsApp ("Export Chat" → without media) and import the .txt via Import → WhatsApp export in the app.
-- Gmail/Outlook/Slack/Discord native connectors: not built yet — see `TODO.md`.
+- Outlook/Slack/Discord native connectors: not built yet — see `TODO.md`.
+
+**People** — every sender AXON sees a message from is auto-added to People (header → People) with just their raw address/id as a name. Click them to add a real name, how you know them ("sister," "coworker," "college friend" — freeform), and notes. Once set, that name shows up on all their future messages and is never overwritten by the auto-add logic. You can also add someone manually before they've ever messaged you.
 
 ---
 
@@ -68,6 +73,51 @@ This opens the right signup/key page in your browser (Groq or Gemini, your choic
 
 ---
 
+## Gmail & Calendar API setup
+
+This connects AXON to your real Gmail inbox and Google Calendar via OAuth (the same "sign in with Google, approve access" flow every Google-connected app uses — nothing custom or unusual). Takes about 5 minutes. You only need to do steps 1–5 once, ever.
+
+**1. Create a Google Cloud project**
+Go to [console.cloud.google.com](https://console.cloud.google.com) → click the project dropdown (top left) → **New Project** → name it anything (e.g. "AXON") → Create.
+
+**2. Enable the two APIs**
+With your new project selected, go to **APIs & Services → Library**, and enable both:
+- **Gmail API**
+- **Google Calendar API**
+(Search for each by name, click it, click **Enable**.)
+
+**3. Configure the OAuth consent screen**
+Go to **APIs & Services → OAuth consent screen**.
+- User type: **External** (unless you have a Google Workspace org — then Internal works too)
+- Fill in the required fields (app name, your email) — nothing else matters for personal use
+- On the **Scopes** step, you can skip adding scopes here (the app requests them directly)
+- On the **Test users** step, **add your own Gmail address** — this is required while the app is in "Testing" mode, which is fine for personal use and avoids Google's app-review process entirely
+- Save through to the end
+
+**4. Create an OAuth Client ID**
+Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
+- Application type: **Desktop app** (important — this is what lets the sign-in flow work on `localhost` without extra config)
+- Name it anything
+- Click **Create** — you'll get a **Client ID** and **Client Secret**. Copy both (you can also come back to Credentials later to see them again).
+
+**5. Connect it to AXON**
+```bash
+npm run connect:google
+```
+Paste in the Client ID and Client Secret from step 4, then the phone number/id you used when you set up your AXON profile. It opens your browser to Google's real sign-in/consent screen — sign in, approve access, and you're done. It writes everything to `.env` for you.
+
+**6. Restart AXON**
+Next launch, `/health` will show `"gmail_connector":"connected"`, Gmail will start polling for unread mail (every 2 minutes by default — `GOOGLE_GMAIL_POLL_MS` in `.env`), and `GET /api/calendar/:userId` will return your upcoming events.
+
+**If something goes wrong:**
+- *"redirect_uri_mismatch"* — double check the OAuth client is type **Desktop app**, not "Web application."
+- *No refresh token returned* — Google only issues one the first time you approve an app, or after you've revoked it. Go to [myaccount.google.com/permissions](https://myaccount.google.com/permissions), remove AXON, and run `npm run connect:google` again.
+- *"Access blocked: AXON has not completed Google verification"* — make sure you added yourself as a **Test user** in step 3; testing-mode apps skip verification entirely for test users.
+
+Not built yet: a Calendar UI panel (the API works — `GET /api/calendar/:userId` — but there's no inbox widget showing events yet, tracked in `TODO.md`), and the generic IMAP email connector still runs independently of this — you can use either or both.
+
+---
+
 ## Building a signed installer (optional, later)
 
 ```bash
@@ -108,7 +158,9 @@ Being upfront about the gap between "runs today" and "a real product":
 - **Google Sign-In / cross-device encrypted sync** — not started. `TRIAL_KEYS`/BYOK exists for AI providers only; there's no account system or sync protocol yet.
 - **Code signing & notarization** for the Mac/Windows installers — not set up; builds will show OS security warnings.
 - **App icons** — `manifest.json`/`layout.jsx` reference `/icons/icon-192.png` etc. that don't exist yet; add real icon files under `public/icons/`.
-- **Gmail/Outlook/Slack/Discord native connectors** — not built. Email works today via generic IMAP (no OAuth app registration needed) or manual paste; the other three need real OAuth/bot-token integrations, tracked in `TODO.md`.
+- **Outlook/Slack/Discord native connectors** — not built (Gmail and generic-IMAP email both work; those three need their own OAuth/bot-token integrations, tracked in `TODO.md`).
+- **Calendar UI** — the API works (`GET /api/calendar/:userId`) but there's no inbox widget/panel showing events yet.
+- **Gmail/Calendar connector code is syntax-verified but not tested against a real Google account** — no Google Cloud project or test credentials available in this dev sandbox. The manual email/WhatsApp import paths remain the ones verified fully end-to-end.
 - **iMessage import** — not built (no live connector possible either; Apple has no API for it).
 - The original relationship-memory/multi-connector vision from the AXON PRD (semantic search across platforms, reminder engine, relationship timeline) is a different, larger scope than this codebase currently covers — see `TODO.md`.
 - **Gemini inference wiring** — key acquisition works (`npm run setup:key`), but `triage.js`/`translator.js`/`sarcasmEngine.js`/`responseGenerator.js`/`vectorStore.js` still call the Groq SDK directly rather than routing through `config.js`'s `getActiveProvider()`.

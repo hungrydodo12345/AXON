@@ -28,7 +28,16 @@
 
 const express = require("express");
 const { validateBootConfig } = require("./config");
-const { initFirebase, getDb, getProfile, saveMessage, upsertProfile } = require("./localSchema");
+const {
+  initFirebase,
+  getDb,
+  getProfile,
+  saveMessage,
+  upsertProfile,
+  upsertContact,
+  getContact,
+  getContacts,
+} = require("./localSchema");
 const { detectSafetyWord, executeGargoyleProtocol, getGroundingPrompt } = require("./gargoyle");
 const { resolveConstitution } = require("./constitutionEngine");
 const { triageMessage } = require("./triage");
@@ -40,6 +49,8 @@ const { processMessageIntoMemory } = require("./memoryEngine");
 const { trackWordFrequency, proposeGraduation } = require("./growthTracker");
 const { startEmailImapConnector } = require("./connectors/emailImap");
 const { parseWhatsAppExport } = require("./connectors/whatsappImport");
+const { startGmailConnector } = require("./connectors/gmailApi");
+const { getUpcomingEvents } = require("./connectors/googleCalendar");
 const {
   applySecurityMiddleware,
   authMiddleware,
@@ -74,6 +85,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const sseClients = new Map();
 let emailConnectorStatus = "not_configured";
+let gmailConnectorStatus = "not_configured";
 
 // Apply security middleware (helmet, CORS, rate limit)
 applySecurityMiddleware(app);
@@ -109,6 +121,7 @@ app.get("/health", (req, res) => {
   res.json({
     status: "ok",
     email_connector: emailConnectorStatus,
+    gmail_connector: gmailConnectorStatus,
     uptime: process.uptime(),
   });
 });
@@ -196,11 +209,58 @@ app.get("/api/state/:userId", authMiddleware, async (req, res) => {
       .get();
 
     const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const contacts = await getContacts(userId);
 
-    res.json({ profile, constitution, messages });
+    res.json({ profile, constitution, messages, contacts });
   } catch (err) {
     console.error("[STATE API] Error:", err);
     res.status(500).json({ error: "Failed to load inbox state" });
+  }
+});
+
+// List people/relationships
+app.get("/api/contacts/:userId", authMiddleware, async (req, res) => {
+  try {
+    const contacts = await getContacts(req.params.userId);
+    res.json({ contacts });
+  } catch (err) {
+    console.error("[CONTACTS API] Error:", err);
+    res.status(500).json({ error: "Failed to load contacts" });
+  }
+});
+
+// Upcoming Google Calendar events — requires `npm run connect:google` first.
+app.get("/api/calendar/:userId", authMiddleware, async (req, res) => {
+  try {
+    const events = await getUpcomingEvents();
+    if (events === null) {
+      return res.status(404).json({ error: "Google Calendar isn't connected. Run `npm run connect:google`." });
+    }
+    res.json({ events });
+  } catch (err) {
+    console.error("[CALENDAR API] Error:", err);
+    res.status(500).json({ error: "Failed to load calendar events" });
+  }
+});
+
+// Add or edit a person's relationship info — name, relationship, notes,
+// bucket. Works for a brand-new person (nobody's messaged yet) just as
+// well as editing someone auto-created from an imported message.
+app.post("/api/contacts/:userId/:contactId", authMiddleware, async (req, res) => {
+  try {
+    const { display_name, relationship_context, notes, bucket } = req.body;
+    const update = {};
+    if (display_name !== undefined) update.display_name = display_name;
+    if (relationship_context !== undefined) update.relationship_context = relationship_context;
+    if (notes !== undefined) update.notes = notes;
+    if (bucket !== undefined) update.bucket = bucket;
+
+    await upsertContact(req.params.userId, req.params.contactId, update);
+    const contact = await getContact(req.params.userId, req.params.contactId);
+    res.json({ success: true, contact });
+  } catch (err) {
+    console.error("[CONTACTS API] Error:", err);
+    res.status(500).json({ error: "Failed to save contact" });
   }
 });
 
@@ -373,6 +433,16 @@ async function processIncomingMessage({
 
   const constitution = resolveConstitution(profile);
 
+  // ── STEP 2b: CONTACT / RELATIONSHIP (effortless — auto-created, never overwrites a name you've already set) ──
+  const existingContact = await getContact(userId, senderId).catch(() => null);
+  const resolvedSenderName = existingContact?.display_name || senderName;
+
+  upsertContact(userId, senderId, {
+    display_name: existingContact?.display_name || senderName,
+    last_message_at: timestamp.toISOString(),
+    message_count: (existingContact?.message_count || 0) + 1,
+  }).catch((err) => console.error("[LIBRARIAN] Contact touch failed:", err.message));
+
   // ── STEP 3: TRIAGE ──
   const triageResult = await triageMessage({
     messageText,
@@ -442,7 +512,7 @@ async function processIncomingMessage({
     id: messageId,
     platform,
     from: senderId,
-    from_name: senderName,
+    from_name: resolvedSenderName,
     to: userId,
     original_text: messageText,
     translated_text: translation.translated,
@@ -566,6 +636,17 @@ startEmailImapConnector({
 }).catch((err) => {
   emailConnectorStatus = "error";
   console.error("[LIBRARIAN] Email connector failed to start:", err.message);
+});
+
+// Live Gmail connector (Gmail API via OAuth) — only starts if Google
+// credentials from `npm run connect:google` are present. Non-fatal
+// either way.
+startGmailConnector({
+  onMessage: processIncomingMessage,
+  onStatusChange: (status) => { gmailConnectorStatus = status; },
+}).catch((err) => {
+  gmailConnectorStatus = "error";
+  console.error("[LIBRARIAN] Gmail connector failed to start:", err.message);
 });
 
 module.exports = { app, emitToUser, processIncomingMessage };

@@ -32,6 +32,12 @@ Engineering backlog derived from the AXON PRD (v0.1), scoped against what this r
 - [x] `POST /api/import/email/:userId` and `POST /api/import/whatsapp/:userId` — manual import endpoints, both auth-protected, both verified end-to-end via curl (profile → token → import → inbox hydrate all round-tripped correctly).
 - [x] `components/ImportPanel.jsx` — in-app UI (Import button in the inbox header) with two tabs: paste-an-email and paste-or-upload-a-WhatsApp-export.
 
+## Done this session (round 4)
+
+- [x] **People / relationships** — `localSchema.js` gained `upsertContact`/`getContact`/`getContacts`. Every inbound message now auto-creates or "touches" a contact (`processIncomingMessage` in `librarian.js`, STEP 2b) with a message count and last-active timestamp, using the raw sender id as the name until a real one is set. Once you name someone, that name sticks on all future messages from them and is never silently overwritten. `GET/POST /api/contacts/:userId[/:contactId]` plus `components/PeoplePanel.jsx` (People button in the inbox header — search, inline edit, add someone manually before they've even messaged). Verified end-to-end: auto-create → manual naming → name persistence across a second message → manual add of a person with zero messages, all round-tripped correctly via curl.
+- [x] **Gmail + Calendar OAuth pipeline** — `npm run connect:google` runs the real Google OAuth consent flow (opens browser, catches the redirect on a local loopback server, exchanges the code for a refresh token) and writes `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN`/`GOOGLE_AXON_USER_ID` to `.env`. `connectors/gmailApi.js` polls Gmail for unread mail via the real Gmail API (not IMAP) and feeds it through the same pipeline as every other source. `connectors/googleCalendar.js` + `GET /api/calendar/:userId` exposes upcoming events (read-only). Both optional, both no-op cleanly if Google OAuth isn't configured.
+- [x] README "Gmail & Calendar API setup" — full Google Cloud Console walkthrough (create project, enable APIs, configure OAuth consent screen, create a Desktop-app OAuth client) ending in `npm run connect:google`, plus a troubleshooting section for the common failure modes (redirect_uri_mismatch, missing refresh token, unverified-app warning).
+
 ## Known gaps (see README "What's NOT done yet")
 
 - [ ] Actual `.dmg`/`.exe` build has not been produced end-to-end (this dev sandbox has no network access to download Electron's platform binaries) — config is written and the underlying app is verified working, but `npm run dist:mac` / `dist:win` need to be run for real on a Mac / Windows machine (or CI) before distributing. Launcher scripts are the recommended path for now.
@@ -40,6 +46,9 @@ Engineering backlog derived from the AXON PRD (v0.1), scoped against what this r
 - [ ] Gemini inference wiring — `triage.js`, `translator.js`, `sarcasmEngine.js`, `responseGenerator.js`, `vectorStore.js` still call the Groq SDK directly instead of `config.js`'s `getActiveProvider()`.
 - [ ] `Launch-AXON.bat` is written but untested on an actual Windows machine (no Windows available in this dev sandbox) — the underlying `.env`/`AUTH_SECRET` generation logic was verified in isolation with equivalent shell logic, but not the batch file itself end-to-end.
 - [ ] `connectors/emailImap.js` is syntax-verified but not tested against a real IMAP server (no live mailbox credentials available in this dev sandbox) — the manual email import path (`POST /api/import/email`) is the one that's been fully verified end-to-end.
+- [ ] `connectors/gmailApi.js`, `connectors/googleCalendar.js`, and `scripts/connect-google.js` are syntax-verified and the "not configured" / graceful-failure paths are tested, but the actual Google OAuth consent flow and live Gmail/Calendar polling have not been exercised against a real Google account (no Google Cloud project available in this dev sandbox).
+- [ ] Calendar UI — `GET /api/calendar/:userId` works but there's no inbox panel/widget displaying events yet.
+- [ ] People panel is desktop-only UI polish for now — no bulk import of contacts (e.g. from a phone contacts export), no relationship-summary auto-generation (the PRD's "Relationship Summary" concept) — just name/relationship/notes/bucket, set manually.
 - [ ] **Security**: rotate the Firebase service account key and `AUTH_SECRET` that were committed to git history in `.env`/`.env.local`/`.env-heh` before this session. (Groq key: user has said it's fine to keep using for the demo, and it's now also intentionally hardcoded as the trial fallback in `config.js` — not part of this rotation ask.)
 
 ## Dropped from this session's scope (explicitly deferred, not forgotten)
@@ -55,8 +64,9 @@ The original AXON PRD describes a relationship-memory layer across Gmail/Slack/D
 
 **Native integrations** (direct API, real-time):
 - [x] Email — via generic IMAP (`connectors/emailImap.js`); works with Gmail/Outlook/365/etc. today without per-provider OAuth setup
-- [ ] Gmail (OAuth-specific, richer than generic IMAP — labels, threading, etc.)
-- [ ] Outlook / Microsoft 365 (OAuth-specific, same rationale)
+- [x] Gmail — via the real Gmail API + OAuth (`connectors/gmailApi.js`, `npm run connect:google`)
+- [x] Calendar (read-only) — `connectors/googleCalendar.js`, `GET /api/calendar/:userId` (no UI yet)
+- [ ] Outlook / Microsoft 365 (OAuth-specific — generic IMAP covers this today, native API integration not built)
 - [ ] Slack
 - [ ] Discord
 
@@ -67,7 +77,8 @@ The original AXON PRD describes a relationship-memory layer across Gmail/Slack/D
 
 Plus the surrounding engine work:
 
-- [ ] Relationship Engine (timeline, contact profiles, commitments, summaries, interaction stats) — `memoryEngine.js`/`vectorStore.js` are a starting point but scoped to single-user data today, not cross-platform relationship modeling
+- [x] Contact profiles (name, relationship, notes, bucket, message count, last-active) — `localSchema.js` contacts collection + `components/PeoplePanel.jsx`
+- [ ] Relationship Engine — timeline, commitments, auto-generated relationship summaries, interaction pattern analysis. `memoryEngine.js`/`vectorStore.js` are a starting point but scoped to single-user data today, not cross-platform relationship modeling; contacts (above) are the "who," not yet the "what's the story with them"
 - [ ] Context Builder that assembles cross-platform relationship context for AI calls
 - [ ] Meaning-based semantic search across all connected platforms ("What did Morgan say about the repository?")
 - [ ] Reminder Engine that resurfaces context rather than issuing traditional reminders

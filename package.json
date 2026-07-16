@@ -11,6 +11,7 @@
     "next:start": "next start -p 3001",
     "electron:dev": "electron .",
     "setup:key": "node scripts/setup-api-key.js",
+    "connect:google": "node scripts/connect-google.js",
     "dist:mac": "npm run next:build && electron-builder --mac",
     "dist:win": "npm run next:build && electron-builder --win",
     "dist": "npm run next:build && electron-builder --mac --win"
@@ -30,7 +31,8 @@
     "react-dom": "^18.3.0",
     "next-pwa": "^5.6.0",
     "imapflow": "^1.0.164",
-    "mailparser": "^3.7.1"
+    "mailparser": "^3.7.1",
+    "googleapis": "^140.0.1"
   },
   "devDependencies": {
     "electron": "^31.0.0",

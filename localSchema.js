@@ -118,13 +118,14 @@ const SCHEMA = {
    * users/{phoneNumber}/contacts/{contactId}
    */
   contact: {
-    phone_number: "",
+    contact_id: "",                // sender id — email, phone, WhatsApp export name, ...
     display_name: "",
     bucket: "casual",             // "vip" | "work" | "casual" | "mute"
     notes: "",                    // user-added context
     last_message_at: null,        // timestamp
+    message_count: 0,             // int — auto-incremented per inbound message
     avg_response_time_mins: null, // int — tracked for nudge logic
-    relationship_context: "",     // string — "boss" | "friend" | "parent" etc.
+    relationship_context: "",     // string — "boss" | "friend" | "parent" etc. — freeform, effortless to set
   },
 
   /**
@@ -254,6 +255,73 @@ async function logGargoyleEvent(phoneNumber, eventData) {
 }
 
 /**
+ * Create or update a contact's relationship info (name, relationship,
+ * notes, bucket). Partial updates are fine — only touches the fields
+ * passed in, so auto-created stub contacts don't clobber names a user
+ * has already added, and vice versa.
+ *
+ * @param {string} phoneNumber — the AXON account owner
+ * @param {string} contactId — sender id (email, phone, WhatsApp name, ...)
+ * @param {object} contactData — partial contact fields
+ */
+async function upsertContact(phoneNumber, contactId, contactData) {
+  const docRef = getDb()
+    .collection("users")
+    .doc(phoneNumber)
+    .collection("contacts")
+    .doc(contactId);
+
+  const doc = await docRef.get();
+
+  if (doc.exists) {
+    await docRef.update({
+      ...contactData,
+      updated_at: FieldValue.serverTimestamp(),
+    });
+  } else {
+    await docRef.set({
+      ...SCHEMA.contact,
+      ...contactData,
+      contact_id: contactId,
+      created_at: FieldValue.serverTimestamp(),
+      updated_at: FieldValue.serverTimestamp(),
+    });
+  }
+}
+
+/**
+ * Get one contact.
+ * @param {string} phoneNumber
+ * @param {string} contactId
+ * @returns {object|null}
+ */
+async function getContact(phoneNumber, contactId) {
+  const doc = await getDb()
+    .collection("users")
+    .doc(phoneNumber)
+    .collection("contacts")
+    .doc(contactId)
+    .get();
+  return doc.exists ? doc.data() : null;
+}
+
+/**
+ * List all contacts for a user, most recently active first.
+ * @param {string} phoneNumber
+ * @returns {Array}
+ */
+async function getContacts(phoneNumber) {
+  const snapshot = await getDb()
+    .collection("users")
+    .doc(phoneNumber)
+    .collection("contacts")
+    .orderBy("last_message_at", "desc")
+    .get();
+
+  return snapshot.docs.map((d) => d.data());
+}
+
+/**
  * Save a constitution override.
  * @param {string} phoneNumber
  * @param {object} overrideData
@@ -276,6 +344,9 @@ module.exports = {
   upsertProfile,
   getProfile,
   saveMessage,
+  upsertContact,
+  getContact,
+  getContacts,
   logGargoyleEvent,
   saveOverride,
 };
