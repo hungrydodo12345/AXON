@@ -22,12 +22,36 @@ const ROOT = path.join(__dirname, "..");
 const ENV_PATH = path.join(ROOT, ".env");
 const ENV_EXAMPLE_PATH = path.join(ROOT, ".env.example");
 const REDIRECT_PORT = 51823;
-const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}/oauth2callback`;
+// Desktop-app OAuth clients register a bare "http://localhost" redirect
+// (see the client_secret.json Google gives you) — the loopback flow
+// (RFC 8252) lets any port work as long as the host matches, so this
+// stays compatible with that registration without needing a path.
+const REDIRECT_URI = `http://localhost:${REDIRECT_PORT}`;
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify", // read + mark-as-read
   "https://www.googleapis.com/auth/calendar.readonly",
 ];
+
+/**
+ * Look for a Google-downloaded client_secret*.json in the project
+ * root and pull client_id/client_secret out of it, so you don't have
+ * to copy-paste them by hand. Supports both "installed" (Desktop app)
+ * and "web" shapes.
+ */
+function findClientSecretFile() {
+  const match = fs.readdirSync(ROOT).find((f) => /^client_secret.*\.json$/.test(f));
+  if (!match) return null;
+
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(ROOT, match), "utf8"));
+    const creds = data.installed || data.web;
+    if (!creds?.client_id || !creds?.client_secret) return null;
+    return { clientId: creds.client_id, clientSecret: creds.client_secret, file: match };
+  } catch {
+    return null;
+  }
+}
 
 function ask(rl, question) {
   return new Promise((resolve) => rl.question(question, resolve));
@@ -71,13 +95,13 @@ function waitForOAuthCallback() {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url, REDIRECT_URI);
-      if (url.pathname !== "/oauth2callback") {
-        res.writeHead(404).end();
-        return;
-      }
-
       const code = url.searchParams.get("code");
       const error = url.searchParams.get("error");
+
+      if (!code && !error) {
+        res.writeHead(204).end(); // e.g. favicon requests — ignore, keep waiting
+        return;
+      }
 
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(error
@@ -103,13 +127,23 @@ async function main() {
   }
 
   console.log("AXON — Gmail + Calendar connection\n");
-  console.log("You'll need a Client ID and Client Secret from Google Cloud Console.");
-  console.log("Full walkthrough: see README.md → 'Gmail & Calendar API setup'.\n");
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-  const clientId = (await ask(rl, "Google OAuth Client ID: ")).trim();
-  const clientSecret = (await ask(rl, "Google OAuth Client Secret: ")).trim();
+  let clientId, clientSecret;
+  const fromFile = findClientSecretFile();
+
+  if (fromFile) {
+    console.log(`Found ${fromFile.file} in the project root — using its Client ID/Secret.`);
+    ({ clientId, clientSecret } = fromFile);
+  } else {
+    console.log("You'll need a Client ID and Client Secret from Google Cloud Console.");
+    console.log("Full walkthrough: see README.md → 'Gmail & Calendar API setup'.");
+    console.log("(Tip: drop your downloaded client_secret*.json into the project root and this step is skipped next time.)\n");
+    clientId = (await ask(rl, "Google OAuth Client ID: ")).trim();
+    clientSecret = (await ask(rl, "Google OAuth Client Secret: ")).trim();
+  }
+
   const axonUserId = (await ask(rl, "Which AXON account should Gmail attach to? (the phone number/id you used at onboarding): ")).trim();
 
   if (!clientId || !clientSecret || !axonUserId) {
