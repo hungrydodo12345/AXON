@@ -15,8 +15,8 @@
  * All data stored in user's Firestore. PRIVACY_ABSOLUTE compliant.
  */
 
-const { getDb } = require("./firebaseSchema");
-const admin = require("firebase-admin");
+const { getDb } = require("./localSchema");
+const { FieldValue } = require("./localStore");
 
 // ============================================================
 // VOCAB MODES
@@ -64,7 +64,7 @@ async function setVocabList(userId, words, mode = VOCAB_MODES.HARD) {
     restricted_vocab: normalized,
     vocab_mode: mode,
     vocab_pending: [],
-    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    updated_at: FieldValue.serverTimestamp(),
   });
 }
 
@@ -80,7 +80,7 @@ async function addWords(userId, newWords) {
 
   await getDb().collection("users").doc(userId).update({
     restricted_vocab: merged,
-    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    updated_at: FieldValue.serverTimestamp(),
   });
 }
 
@@ -96,7 +96,7 @@ async function removeWords(userId, removeWords) {
 
   await getDb().collection("users").doc(userId).update({
     restricted_vocab: filtered,
-    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    updated_at: FieldValue.serverTimestamp(),
   });
 }
 
@@ -136,7 +136,7 @@ async function trackWordFrequency(userId, messageText) {
   await ref.set({
     date: today,
     freq,
-    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    updated_at: FieldValue.serverTimestamp(),
   }, { merge: true });
 }
 
@@ -167,7 +167,7 @@ async function proposeGraduation(userId, word, context = "") {
 
   // Store in pending list
   await getDb().collection("users").doc(userId).update({
-    vocab_pending: admin.firestore.FieldValue.arrayUnion(pendingEntry.word),
+    vocab_pending: FieldValue.arrayUnion(pendingEntry.word),
   });
 
   // Store full pending entry in subcollection
@@ -179,7 +179,7 @@ async function proposeGraduation(userId, word, context = "") {
       ...pendingEntry,
       approved: false,
       rejected: false,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
     });
 }
 
@@ -197,7 +197,7 @@ async function approveGraduation(userId, word, graduationId) {
 
   // Remove from pending
   await getDb().collection("users").doc(userId).update({
-    vocab_pending: admin.firestore.FieldValue.arrayRemove(normalized),
+    vocab_pending: FieldValue.arrayRemove(normalized),
   });
 
   // Mark graduation doc as approved
@@ -207,7 +207,7 @@ async function approveGraduation(userId, word, graduationId) {
       .doc(userId)
       .collection("vocab_graduation")
       .doc(graduationId)
-      .update({ approved: true, approved_at: admin.firestore.FieldValue.serverTimestamp() });
+      .update({ approved: true, approved_at: FieldValue.serverTimestamp() });
   }
 
   // Track in growth history
@@ -218,7 +218,7 @@ async function approveGraduation(userId, word, graduationId) {
     .add({
       word: normalized,
       event: "graduated",
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
     });
 }
 
@@ -232,7 +232,7 @@ async function rejectGraduation(userId, word, graduationId) {
   const normalized = word.toLowerCase().trim();
 
   await getDb().collection("users").doc(userId).update({
-    vocab_pending: admin.firestore.FieldValue.arrayRemove(normalized),
+    vocab_pending: FieldValue.arrayRemove(normalized),
   });
 
   if (graduationId) {
@@ -294,7 +294,7 @@ async function detectRegressions(userId, dayThreshold = 14) {
         event: "regression_detected",
         words: regressions,
         threshold_days: dayThreshold,
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        created_at: FieldValue.serverTimestamp(),
       });
   }
 
@@ -397,7 +397,7 @@ async function addCustomSymbol(userId, word, symbolUrl) {
       word: word.toLowerCase().trim(),
       symbol_url: symbolUrl,
       custom: true,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
     });
 }
 

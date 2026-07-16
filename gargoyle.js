@@ -18,7 +18,7 @@
 const { Resend } = require("resend");
 const webPush = require("web-push");
 const { getResendConfig, getVapidConfig } = require("./config");
-const { logGargoyleEvent } = require("./firebaseSchema");
+const { logGargoyleEvent } = require("./localSchema");
 
 // ============================================================
 // SAFETY WORD DETECTION
@@ -107,10 +107,10 @@ async function executeGargoyleProtocol({
 
   // Update last_gargoyle_at timestamp
   try {
-    const { getDb } = require("./firebaseSchema");
-    const admin = require("firebase-admin");
+    const { getDb } = require("./localSchema");
+    const { FieldValue } = require("./localStore");
     await getDb().collection("users").doc(userId).update({
-      last_gargoyle_at: admin.firestore.FieldValue.serverTimestamp(),
+      last_gargoyle_at: FieldValue.serverTimestamp(),
     });
   } catch (tsErr) {
     console.error("[GARGOYLE] Failed to update cooldown timestamp:", tsErr.message);

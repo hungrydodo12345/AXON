@@ -32,7 +32,7 @@ const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const express = require("express");
 const { validateBootConfig } = require("./config");
-const { initFirebase, getProfile, saveMessage } = require("./firebaseSchema");
+const { initFirebase, getProfile, saveMessage, upsertProfile } = require("./localSchema");
 const { detectSafetyWord, executeGargoyleProtocol, getGroundingPrompt } = require("./gargoyle");
 const { resolveConstitution } = require("./constitutionEngine");
 const { triageMessage } = require("./triage");
@@ -178,6 +178,20 @@ app.post("/gargoyle/:userId", getGargoyleLimiter(), authMiddleware, async (req, 
   } catch (err) {
     console.error("[GARGOYLE API] Error:", err);
     res.status(500).json({ error: "Gargoyle execution failed" });
+  }
+});
+
+// Create/update a user profile (onboarding PWA — replaces direct Firestore writes)
+app.post("/api/profile", async (req, res) => {
+  try {
+    const { phone_number, ...profileData } = req.body;
+    if (!phone_number) return res.status(400).json({ error: "phone_number required" });
+
+    await upsertProfile(phone_number, profileData);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[PROFILE API] Error:", err);
+    res.status(500).json({ error: "Profile creation failed" });
   }
 });
 

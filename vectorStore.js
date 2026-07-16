@@ -17,9 +17,9 @@
  */
 
 const Groq = require("groq-sdk");
-const { getDb } = require("./firebaseSchema");
+const { getDb } = require("./localSchema");
 const { getGroqConfig } = require("./config");
-const admin = require("firebase-admin");
+const { FieldValue } = require("./localStore");
 
 // ============================================================
 // EMBEDDING GENERATION
@@ -146,7 +146,7 @@ async function storeMessageEmbedding({
       replied: metadata.replied || false,
       reply_speed_mins: metadata.reply_speed_mins || null,
     },
-    created_at: admin.firestore.FieldValue.serverTimestamp(),
+    created_at: FieldValue.serverTimestamp(),
     embedding_model: "groq/nomic-embed-text-v1_5",
   };
 
@@ -341,7 +341,7 @@ async function storePattern(userId, patternData) {
     .set({
       ...patternData,
       date: dateKey,
-      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: FieldValue.serverTimestamp(),
     }, { merge: true });
 }
 
