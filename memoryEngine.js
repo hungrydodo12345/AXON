@@ -22,7 +22,7 @@ const {
   storePattern,
   semanticSearch,
 } = require("./vectorStore");
-const { getDb } = require("./firebaseSchema");
+const { getDb } = require("./localSchema");
 
 // ============================================================
 // REAL-TIME: PROCESS MESSAGE INTO MEMORY

@@ -2,30 +2,43 @@
  * config.js — BYOK Key Resolver
  *
  * Resolution order:
- *   1. User-provided keys (stored in their Firestore doc)
+ *   1. User-provided keys (stored in their local profile — see localSchema.js)
  *   2. Host .env defaults
- *   3. FAIL HARD — no silent fallback to empty strings
+ *   3. Hardcoded trial key (Groq only — see TRIAL_KEYS below)
+ *   4. FAIL HARD — no silent fallback to empty strings
  *
  * Constitutional compliance: PRIVACY_ABSOLUTE
  *   - User keys never logged
- *   - User keys never cached outside Firestore
+ *   - User keys never leave the local datastore
  */
 
 require("dotenv").config();
 
 const REQUIRED_KEYS = {
   groq: ["GROQ_API_KEY"],
-  firebase: ["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY"],
   resend: ["RESEND_API_KEY", "RESEND_FROM_EMAIL"],
   vapid: ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"],
+};
+
+// ============================================================
+// TRIAL KEYS
+//
+// Hardcoded fallback keys for a zero-setup first run, so a
+// non-technical user can download AXON and use it immediately
+// without creating any accounts. Intended for the initial trial
+// only — swap TRIAL_KEYS.GROQ_API_KEY for your own key before
+// any real/production distribution.
+// ============================================================
+const TRIAL_KEYS = {
+  GROQ_API_KEY: process.env.AXON_TRIAL_GROQ_API_KEY || "", // ← paste trial key here or set AXON_TRIAL_GROQ_API_KEY
 };
 
 /**
  * Resolve a config key.
  * @param {string} key — env variable name
- * @param {object|null} userConfig — user-provided overrides from Firestore
+ * @param {object|null} userConfig — user-provided overrides from the local profile
  * @returns {string} resolved value
- * @throws {Error} if neither user nor env provides the key
+ * @throws {Error} if neither user, env, nor trial default provides the key
  */
 function resolveKey(key, userConfig = null) {
   // 1. User-provided key takes priority
@@ -38,7 +51,12 @@ function resolveKey(key, userConfig = null) {
     return process.env[key].trim();
   }
 
-  // 3. Hard fail — no silent empty strings
+  // 3. Hardcoded trial fallback (Groq only)
+  if (TRIAL_KEYS[key] && TRIAL_KEYS[key].trim() !== "") {
+    return TRIAL_KEYS[key].trim();
+  }
+
+  // 4. Hard fail — no silent empty strings
   throw new Error(
     `[CONFIG FATAL] Key "${key}" not found. ` +
     `Provide it via BYOK (user settings) or .env file.`
@@ -93,20 +111,6 @@ function getGroqConfig(userConfig = null) {
 }
 
 /**
- * Get Firebase config.
- * @param {object|null} userConfig
- * @returns {{ projectId: string, clientEmail: string, privateKey: string }}
- */
-function getFirebaseConfig(userConfig = null) {
-  const keys = resolveGroup("firebase", userConfig);
-  return {
-    projectId: keys.FIREBASE_PROJECT_ID,
-    clientEmail: keys.FIREBASE_CLIENT_EMAIL,
-    privateKey: keys.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-  };
-}
-
-/**
  * Get Resend (email) config.
  * @param {object|null} userConfig
  * @returns {{ apiKey: string, fromEmail: string }}
@@ -140,7 +144,6 @@ function getVapidConfig() {
 function validateBootConfig() {
   const errors = [];
 
-  try { resolveGroup("firebase"); } catch (e) { errors.push(e.message); }
   try { resolveGroup("groq"); } catch (e) { errors.push(e.message); }
 
   // Resend and VAPID are optional at boot (WUPHF layer)
@@ -154,7 +157,6 @@ module.exports = {
   resolveKey,
   resolveGroup,
   getGroqConfig,
-  getFirebaseConfig,
   getResendConfig,
   getVapidConfig,
   validateBootConfig,

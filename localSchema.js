@@ -1,9 +1,9 @@
 /**
- * firebaseSchema.js — Firestore Schema & Initialization
+ * localSchema.js — Local Datastore Schema & Initialization
  *
- * Constitutional compliance:
- *   PRIVACY_ABSOLUTE — all data in user-owned docs
- *   No cross-user reads, no centralized aggregation
+ * Local-first replacement for firebaseSchema.js. All data lives in a
+ * single JSON file on disk (see localStore.js) — nothing leaves the
+ * machine unless the user explicitly enables sync.
  *
  * Collection structure:
  *   users/{phoneNumber}/
@@ -14,40 +14,28 @@
  *     └── gargoyle_log/{id}(safety event audit)
  */
 
-const admin = require("firebase-admin");
-const { getFirebaseConfig } = require("./config");
+const { collection, FieldValue } = require("./localStore");
 
-let db = null;
+let initialized = false;
 
 /**
- * Initialize Firebase Admin SDK.
- * @param {object|null} userConfig — BYOK overrides
- * @returns {FirebaseFirestore.Firestore}
+ * Initialize the local datastore (kept for API parity with the old
+ * Firebase init call sites — there is no external connection to make).
+ * @returns {{ collection: Function }}
  */
-function initFirebase(userConfig = null) {
-  if (db) return db;
-
-  const config = getFirebaseConfig(userConfig);
-
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: config.projectId,
-      clientEmail: config.clientEmail,
-      privateKey: config.privateKey,
-    }),
-  });
-
-  db = admin.firestore();
-  return db;
+function initFirebase() {
+  initialized = true;
+  return { collection };
 }
 
 /**
- * Get Firestore instance (must call initFirebase first).
- * @returns {FirebaseFirestore.Firestore}
+ * Get the local "db" handle (must call initFirebase first, matching
+ * the original Firebase-backed API).
+ * @returns {{ collection: Function }}
  */
 function getDb() {
-  if (!db) throw new Error("[FIREBASE FATAL] Not initialized. Call initFirebase() first.");
-  return db;
+  if (!initialized) throw new Error("[LOCAL_STORE FATAL] Not initialized. Call initFirebase() first.");
+  return { collection };
 }
 
 // ============================================================
@@ -93,12 +81,9 @@ const SCHEMA = {
       mute: [],
     },
 
-    // --- BYOK Keys (encrypted at rest by Firestore) ---
+    // --- BYOK Keys (local, encrypted at rest by the OS keychain in future) ---
     user_keys: {
       GROQ_API_KEY: null,
-      FIREBASE_PROJECT_ID: null,
-      FIREBASE_CLIENT_EMAIL: null,
-      FIREBASE_PRIVATE_KEY: null,
       RESEND_API_KEY: null,
     },
 
@@ -212,15 +197,15 @@ async function upsertProfile(phoneNumber, profileData) {
   if (doc.exists) {
     await docRef.update({
       ...profileData,
-      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: FieldValue.serverTimestamp(),
     });
   } else {
     await docRef.set({
       ...SCHEMA.profile,
       ...profileData,
       phone_number: phoneNumber,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
-      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
+      updated_at: FieldValue.serverTimestamp(),
     });
   }
 }
@@ -247,7 +232,7 @@ async function saveMessage(phoneNumber, messageData) {
     .collection("messages")
     .add({
       ...messageData,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
     });
 }
 
@@ -264,7 +249,7 @@ async function logGargoyleEvent(phoneNumber, eventData) {
     .add({
       ...SCHEMA.gargoyle_event,
       ...eventData,
-      triggered_at: admin.firestore.FieldValue.serverTimestamp(),
+      triggered_at: FieldValue.serverTimestamp(),
     });
 }
 
@@ -280,7 +265,7 @@ async function saveOverride(phoneNumber, overrideData) {
     .collection("overrides")
     .add({
       ...overrideData,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_at: FieldValue.serverTimestamp(),
     });
 }
 

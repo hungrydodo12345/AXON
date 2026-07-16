@@ -11,7 +11,7 @@
  *
  * Constitutional compliance:
  *   - NON-DIAGNOSTIC: questions are preference-based only
- *   - PRIVACY_ABSOLUTE: all data goes to user's Firestore
+ *   - PRIVACY_ABSOLUTE: all data stays in the local datastore
  *   - BYOK: user can provide own keys or use host defaults
  */
 
@@ -31,7 +31,6 @@ export default function OnboardingPage() {
     safety_word: "",
     safety_contacts: [{ name: "", phone: "", email: "" }],
     groq_key: "",
-    firebase_config: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -47,21 +46,7 @@ export default function OnboardingPage() {
     setError(null);
 
     try {
-      const { initFirebaseClient, getDb } = await import("../../lib/firebase");
-      const { doc, setDoc, serverTimestamp } = await import("firebase/firestore");
-
-      // Save optional BYOK config to localStorage
-      if (data.firebase_config) {
-        try {
-          const parsed = JSON.parse(data.firebase_config);
-          localStorage.setItem("nl_firebase_config", JSON.stringify(parsed));
-        } catch {
-          throw new Error("Firebase config JSON is not valid.");
-        }
-      }
-
-      initFirebaseClient();
-      const db = getDb();
+      const BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_URL || "http://localhost:3000";
 
       // Build restricted vocab array
       const vocab = data.restricted_vocab
@@ -101,14 +86,19 @@ export default function OnboardingPage() {
           vip_inactivity_hours: 24,
           work_inactivity_hours: 48,
         },
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
       };
 
-      await setDoc(doc(db, "users", data.phone), profile);
+      const profileRes = await fetch(`${BRIDGE_URL}/api/profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile),
+      });
+      if (!profileRes.ok) {
+        const body = await profileRes.json().catch(() => ({}));
+        throw new Error(body.error || "Profile creation failed.");
+      }
 
       // Get auth token from Bridge
-      const BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_URL || "http://localhost:3000";
       const tokenRes = await fetch(`${BRIDGE_URL}/auth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -277,20 +267,6 @@ export default function OnboardingPage() {
                 onChange={(e) => update("groq_key", e.target.value.trim())}
                 placeholder="gsk_..."
                 autoComplete="off"
-              />
-            </div>
-
-            <div style={styles.fieldGroup}>
-              <label style={styles.label}>
-                Firebase config (JSON)
-                <span style={styles.hint}>Paste your Firebase project config to use your own database.</span>
-              </label>
-              <textarea
-                style={styles.textarea}
-                value={data.firebase_config}
-                onChange={(e) => update("firebase_config", e.target.value)}
-                placeholder={'{"apiKey": "...", "projectId": "..."}'}
-                rows={4}
               />
             </div>
 

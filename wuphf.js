@@ -10,8 +10,7 @@
  */
 
 const cron = require("node-cron");
-const admin = require("firebase-admin");
-const { getDb } = require("./firebaseSchema");
+const { getDb } = require("./localSchema");
 
 // ============================================================
 // NUDGE SYSTEM
@@ -47,8 +46,8 @@ async function runNudgeCheck(emitToUser) {
 
       for (const msgDoc of messagesSnapshot.docs) {
         const msg = msgDoc.data();
-        const createdAt = msg.created_at?.toDate ? msg.created_at.toDate() : null;
-        if (!createdAt) continue;
+        const createdAt = msg.created_at ? new Date(msg.created_at) : null;
+        if (!createdAt || isNaN(createdAt.getTime())) continue;
 
         const hoursSince = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
         const senderBucket = getBucketForSender(msg.from, profile.contact_buckets);
