@@ -27,7 +27,7 @@ No Firebase, no external account, no cloud database. Your profile, messages, emb
 - **WhatsApp** — manual import only. WhatsApp has no personal-account API; a live bridge (`whatsapp-web.js`, driving WhatsApp Web via headless Chromium + QR login) was tried and removed — see **Why WhatsApp is manual-import-only** below. Export a chat from WhatsApp ("Export Chat" → without media) and import the .txt via Import → WhatsApp export in the app.
 - Outlook/Slack/Discord native connectors: not built yet — see `TODO.md`.
 
-**People** — every sender AXON sees a message from is auto-added to People (header → People) with just their raw address/id as a name. Click them to add a real name, how you know them ("sister," "coworker," "college friend" — freeform), and notes. Once set, that name shows up on all their future messages and is never overwritten by the auto-add logic. You can also add someone manually before they've ever messaged you.
+**People** — every sender AXON sees a message from is auto-added to People (header → People), grouped into **Work** and **Personal** sections (defaults to Personal until you say otherwise), with just their raw address/id as a name. Click them to add a real name, how you know them ("sister," "coworker," "college friend" — freeform), and notes. Once set, that name shows up on all their future messages and is never overwritten by the auto-add logic. You can also add someone manually — pick Work or Personal up front — before they've ever messaged you.
 
 ---
 
@@ -73,7 +73,9 @@ This opens the right signup/key page in your browser (Groq or Gemini, your choic
 
 ---
 
-## Gmail & Calendar API setup
+## Gmail & Calendar API setup (optional — not required)
+
+This is entirely optional. Email and WhatsApp already work with zero setup via manual import, and email also works live via generic IMAP with just an app password (see above) — neither needs anything below. This section is only for the extra step up to the *real* Gmail/Calendar API via OAuth, which involves Google's app-verification flow (see the troubleshooting note on "unverified app" below) and isn't necessary for AXON to be useful.
 
 This connects AXON to your real Gmail inbox and Google Calendar via OAuth (the same "sign in with Google, approve access" flow every Google-connected app uses — nothing custom or unusual). Takes about 5 minutes. You only need to do steps 1–5 once, ever.
 

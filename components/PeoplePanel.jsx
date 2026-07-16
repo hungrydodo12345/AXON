@@ -10,16 +10,17 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 
 const BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_URL || "http://localhost:3000";
 
-const BUCKETS = ["vip", "work", "casual", "mute"];
+const CATEGORIES = ["personal", "work"];
+const BUCKETS = ["vip", "casual", "mute"];
 
 export default function PeoplePanel({ userId, authToken, contacts, onClose, onChanged }) {
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState(null);
-  const [addingNew, setAddingNew] = useState(false);
+  const [addingNew, setAddingNew] = useState(null); // null | "work" | "personal"
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -30,6 +31,9 @@ export default function PeoplePanel({ userId, authToken, contacts, onClose, onCh
     );
   }, [contacts, query]);
 
+  const workContacts = filtered.filter((c) => c.category === "work");
+  const personalContacts = filtered.filter((c) => c.category !== "work");
+
   return (
     <div style={styles.overlay} onClick={onClose}>
       <div style={styles.panel} onClick={(e) => e.stopPropagation()}>
@@ -38,69 +42,113 @@ export default function PeoplePanel({ userId, authToken, contacts, onClose, onCh
           <button style={styles.closeBtn} onClick={onClose}>Close</button>
         </div>
 
-        <div style={styles.searchRow}>
-          <input
-            style={styles.search}
-            placeholder="Search people or relationships..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button style={styles.addBtn} onClick={() => setAddingNew(true)}>+ Add person</button>
-        </div>
+        <input
+          style={styles.search}
+          placeholder="Search people or relationships..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
 
-        {addingNew && (
-          <PersonForm
-            userId={userId}
-            authToken={authToken}
-            onDone={() => { setAddingNew(false); onChanged?.(); }}
-            onCancel={() => setAddingNew(false)}
-          />
-        )}
+        <PeopleSection
+          label="Work"
+          contacts={workContacts}
+          userId={userId}
+          authToken={authToken}
+          editingId={editingId}
+          setEditingId={setEditingId}
+          addingNew={addingNew === "work"}
+          onAddClick={() => setAddingNew("work")}
+          defaultCategory="work"
+          onDone={() => { setAddingNew(null); setEditingId(null); onChanged?.(); }}
+          onCancel={() => { setAddingNew(null); setEditingId(null); }}
+        />
 
-        <div style={styles.list}>
-          {filtered.length === 0 && !addingNew && (
-            <p style={styles.empty}>
-              Nobody yet — people show up automatically the moment a message comes in from them, or add someone manually above.
-            </p>
-          )}
-
-          {filtered.map((c) => (
-            <div key={c.contact_id} style={styles.row}>
-              {editingId === c.contact_id ? (
-                <PersonForm
-                  userId={userId}
-                  authToken={authToken}
-                  contactId={c.contact_id}
-                  initial={c}
-                  onDone={() => { setEditingId(null); onChanged?.(); }}
-                  onCancel={() => setEditingId(null)}
-                />
-              ) : (
-                <button style={styles.rowBtn} onClick={() => setEditingId(c.contact_id)}>
-                  <div style={styles.rowMain}>
-                    <span style={styles.name}>{c.display_name || c.contact_id}</span>
-                    {c.relationship_context && (
-                      <span style={styles.relationship}>{c.relationship_context}</span>
-                    )}
-                  </div>
-                  <div style={styles.rowMeta}>
-                    <span className={`pile-badge ${c.bucket || "casual"}`}>{c.bucket || "casual"}</span>
-                    <span style={styles.count}>{c.message_count || 0} msg{(c.message_count || 0) === 1 ? "" : "s"}</span>
-                  </div>
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+        <PeopleSection
+          label="Personal"
+          contacts={personalContacts}
+          userId={userId}
+          authToken={authToken}
+          editingId={editingId}
+          setEditingId={setEditingId}
+          addingNew={addingNew === "personal"}
+          onAddClick={() => setAddingNew("personal")}
+          defaultCategory="personal"
+          onDone={() => { setAddingNew(null); setEditingId(null); onChanged?.(); }}
+          onCancel={() => { setAddingNew(null); setEditingId(null); }}
+        />
       </div>
     </div>
   );
 }
 
-function PersonForm({ userId, authToken, contactId, initial, onDone, onCancel }) {
+function PeopleSection({
+  label, contacts, userId, authToken, editingId, setEditingId,
+  addingNew, onAddClick, defaultCategory, onDone, onCancel,
+}) {
+  return (
+    <div style={styles.section}>
+      <div style={styles.sectionHeader}>
+        <h3 style={styles.sectionTitle}>{label} <span style={styles.sectionCount}>({contacts.length})</span></h3>
+        <button style={styles.addBtn} onClick={onAddClick}>+ Add</button>
+      </div>
+
+      {addingNew && (
+        <PersonForm
+          userId={userId}
+          authToken={authToken}
+          defaultCategory={defaultCategory}
+          onDone={onDone}
+          onCancel={onCancel}
+        />
+      )}
+
+      <div style={styles.list}>
+        {contacts.length === 0 && !addingNew && (
+          <p style={styles.empty}>
+            {label === "Work"
+              ? "No work people yet — they'll show up automatically, or add one above."
+              : "No personal people yet — they'll show up automatically, or add one above."}
+          </p>
+        )}
+
+        {contacts.map((c) => (
+          <div key={c.contact_id} style={styles.row}>
+            {editingId === c.contact_id ? (
+              <PersonForm
+                userId={userId}
+                authToken={authToken}
+                contactId={c.contact_id}
+                initial={c}
+                defaultCategory={defaultCategory}
+                onDone={onDone}
+                onCancel={onCancel}
+              />
+            ) : (
+              <button style={styles.rowBtn} onClick={() => setEditingId(c.contact_id)}>
+                <div style={styles.rowMain}>
+                  <span style={styles.name}>{c.display_name || c.contact_id}</span>
+                  {c.relationship_context && (
+                    <span style={styles.relationship}>{c.relationship_context}</span>
+                  )}
+                </div>
+                <div style={styles.rowMeta}>
+                  <span className={`pile-badge ${c.bucket || "casual"}`}>{c.bucket || "casual"}</span>
+                  <span style={styles.count}>{c.message_count || 0} msg{(c.message_count || 0) === 1 ? "" : "s"}</span>
+                </div>
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PersonForm({ userId, authToken, contactId, initial, defaultCategory, onDone, onCancel }) {
   const [name, setName] = useState(initial?.display_name || "");
   const [relationship, setRelationship] = useState(initial?.relationship_context || "");
   const [notes, setNotes] = useState(initial?.notes || "");
+  const [category, setCategory] = useState(initial?.category || defaultCategory || "personal");
   const [bucket, setBucket] = useState(initial?.bucket || "casual");
   const [newId, setNewId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -122,6 +170,7 @@ function PersonForm({ userId, authToken, contactId, initial, onDone, onCancel })
           display_name: name,
           relationship_context: relationship,
           notes,
+          category,
           bucket,
         }),
       });
@@ -160,6 +209,18 @@ function PersonForm({ userId, authToken, contactId, initial, onDone, onCancel })
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
       />
+      <div style={styles.categoryToggle}>
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            style={{ ...styles.categoryBtn, ...(category === cat ? styles.categoryBtnActive : {}) }}
+            onClick={() => setCategory(cat)}
+          >
+            {cat === "work" ? "Work" : "Personal"}
+          </button>
+        ))}
+      </div>
       <select style={styles.select} value={bucket} onChange={(e) => setBucket(e.target.value)}>
         {BUCKETS.map((b) => <option key={b} value={b}>{b}</option>)}
       </select>
@@ -196,8 +257,18 @@ const styles = {
   },
   addBtn: {
     background: "var(--bg-card-hover)", border: "1px solid var(--text-muted)", borderRadius: "8px",
-    padding: "10px 14px", color: "var(--text-primary)", cursor: "pointer", whiteSpace: "nowrap",
+    padding: "6px 12px", color: "var(--text-primary)", cursor: "pointer", whiteSpace: "nowrap", fontSize: "0.85rem",
   },
+  section: { display: "flex", flexDirection: "column", gap: "8px" },
+  sectionHeader: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  sectionTitle: { margin: 0, fontSize: "0.9rem", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" },
+  sectionCount: { color: "var(--text-muted)", fontWeight: "400" },
+  categoryToggle: { display: "flex", gap: "6px" },
+  categoryBtn: {
+    flex: 1, background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "8px",
+    padding: "8px", color: "var(--text-secondary)", cursor: "pointer",
+  },
+  categoryBtnActive: { background: "var(--bg-card-hover)", color: "var(--text-primary)", borderColor: "var(--text-muted)" },
   list: { display: "flex", flexDirection: "column", gap: "8px" },
   empty: { color: "var(--text-muted)", fontSize: "0.85rem", textAlign: "center", padding: "20px 0" },
   row: {

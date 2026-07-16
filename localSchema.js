@@ -120,7 +120,8 @@ const SCHEMA = {
   contact: {
     contact_id: "",                // sender id — email, phone, WhatsApp export name, ...
     display_name: "",
-    bucket: "casual",             // "vip" | "work" | "casual" | "mute"
+    category: "personal",         // "work" | "personal" — the work/life split
+    bucket: "casual",             // "vip" | "casual" | "mute" — priority within that category
     notes: "",                    // user-added context
     last_message_at: null,        // timestamp
     message_count: 0,             // int — auto-incremented per inbound message

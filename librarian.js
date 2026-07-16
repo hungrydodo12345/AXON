@@ -244,15 +244,17 @@ app.get("/api/calendar/:userId", authMiddleware, async (req, res) => {
 });
 
 // Add or edit a person's relationship info — name, relationship, notes,
-// bucket. Works for a brand-new person (nobody's messaged yet) just as
-// well as editing someone auto-created from an imported message.
+// work/personal category, bucket. Works for a brand-new person (nobody's
+// messaged yet) just as well as editing someone auto-created from an
+// imported message.
 app.post("/api/contacts/:userId/:contactId", authMiddleware, async (req, res) => {
   try {
-    const { display_name, relationship_context, notes, bucket } = req.body;
+    const { display_name, relationship_context, notes, category, bucket } = req.body;
     const update = {};
     if (display_name !== undefined) update.display_name = display_name;
     if (relationship_context !== undefined) update.relationship_context = relationship_context;
     if (notes !== undefined) update.notes = notes;
+    if (category !== undefined) update.category = category;
     if (bucket !== undefined) update.bucket = bucket;
 
     await upsertContact(req.params.userId, req.params.contactId, update);
