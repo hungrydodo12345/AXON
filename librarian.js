@@ -32,7 +32,7 @@ const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const express = require("express");
 const { validateBootConfig } = require("./config");
-const { initFirebase, getProfile, saveMessage, upsertProfile } = require("./localSchema");
+const { initFirebase, getDb, getProfile, saveMessage, upsertProfile } = require("./localSchema");
 const { detectSafetyWord, executeGargoyleProtocol, getGroundingPrompt } = require("./gargoyle");
 const { resolveConstitution } = require("./constitutionEngine");
 const { triageMessage } = require("./triage");
@@ -48,7 +48,7 @@ const {
   getGargoyleLimiter,
   getSseLimiter,
   generateToken,
-} = require("./middleware");
+} = require("./bridgeSecurity");
 
 // ============================================================
 // BOOT VALIDATION
@@ -57,7 +57,7 @@ const {
 const bootCheck = validateBootConfig();
 if (!bootCheck.valid) {
   console.error("╔══════════════════════════════════════════╗");
-  console.error("║  NEURO-LIBRARIAN — BOOT FAILED           ║");
+  console.error("║  AXON — BOOT FAILED                       ║");
   console.error("╠══════════════════════════════════════════╣");
   for (const err of bootCheck.errors) {
     console.error(`║  ${err}`);
@@ -181,6 +181,31 @@ app.post("/gargoyle/:userId", getGargoyleLimiter(), authMiddleware, async (req, 
   }
 });
 
+// Hydrate the inbox on load: profile, resolved constitution, and message history.
+app.get("/api/state/:userId", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const profile = await getProfile(userId);
+    if (!profile) return res.status(404).json({ error: "User not found. Complete onboarding first." });
+
+    const constitution = resolveConstitution(profile);
+    const snapshot = await getDb()
+      .collection("users")
+      .doc(userId)
+      .collection("messages")
+      .orderBy("created_at", "desc")
+      .limit(200)
+      .get();
+
+    const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    res.json({ profile, constitution, messages });
+  } catch (err) {
+    console.error("[STATE API] Error:", err);
+    res.status(500).json({ error: "Failed to load inbox state" });
+  }
+});
+
 // Create/update a user profile (onboarding PWA — replaces direct Firestore writes)
 app.post("/api/profile", async (req, res) => {
   try {
@@ -240,7 +265,7 @@ const RECONNECT_BASE_DELAY = 5000;
 whatsapp.on("ready", () => {
   reconnectAttempts = 0; // Reset on successful connection
   console.log("╔══════════════════════════════════════════╗");
-  console.log("║  NEURO-LIBRARIAN — BRIDGE ONLINE          ║");
+  console.log("║  AXON — BRIDGE ONLINE                     ║");
   console.log("║  WhatsApp: CONNECTED                      ║");
   console.log("║  Safety Word: ACTIVE                      ║");
   console.log("║  Triage: READY                             ║");
@@ -336,7 +361,7 @@ async function processMessage(message) {
   if (!profile) {
     emitToUser(userPhone, {
       type: "unregistered",
-      message: "Set up your profile to start using Neuro-Librarian.",
+      message: "Set up your profile to start using AXON.",
     });
     return;
   }
@@ -522,6 +547,9 @@ function emitToAllUsers(data) {
 // START
 // ============================================================
 
-whatsapp.initialize();
+whatsapp.initialize().catch((err) => {
+  console.error("[LIBRARIAN] WhatsApp failed to initialize:", err.message);
+  console.error("[LIBRARIAN] The rest of AXON (UI, API, local memory) still works — WhatsApp messages just won't flow in until this is resolved.");
+});
 
 module.exports = { app, whatsapp, emitToUser };

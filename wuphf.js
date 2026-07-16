@@ -225,7 +225,7 @@ function buildGoogleCalendarLink(title, startDate, durationMinutes = 60) {
     action: "TEMPLATE",
     text: title,
     dates: `${formatGCal(startDate)}/${formatGCal(endDate)}`,
-    details: "Event detected by Neuro-Librarian from a WhatsApp message.",
+    details: "Event detected by AXON from a WhatsApp message.",
   });
 
   return `https://calendar.google.com/calendar/render?${params.toString()}`;

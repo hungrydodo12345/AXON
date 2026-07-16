@@ -55,7 +55,7 @@ export default function OnboardingPage() {
         .filter(Boolean);
 
       // Auto-detect constitution blend from answers
-      const { autoDetectBlend } = await import("../../lib/constitutionEngine");
+      const { autoDetectBlend } = await import("../../constitutionEngine");
       const blend = autoDetectBlend(data.answers);
 
       const profile = {
@@ -298,7 +298,7 @@ export default function OnboardingPage() {
               onClick={handleSubmit}
               disabled={loading}
             >
-              {loading ? "Setting up..." : "Start using Neuro-Librarian"}
+              {loading ? "Setting up..." : "Start using AXON"}
             </button>
           )}
         </div>

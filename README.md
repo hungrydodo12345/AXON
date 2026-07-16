@@ -1,219 +1,100 @@
-# Neuro-Librarian
+# AXON
 
-Social Translation Layer and Executive Function Buffer for neurodivergent users.
+A local-first personal cognitive layer — it remembers relationships, not just messages. Currently implemented as a WhatsApp bridge + local desktop app (Next.js UI wrapped in Electron), with everything stored on your machine.
 
 ---
 
-## Repo Structure
+## What's actually running here
 
 ```
-bridge/   → Node.js backend (WhatsApp bridge + AI engine)
-ui/       → Next.js PWA (frontend, deployable to Netlify)
+librarian.js        → Express bridge: WhatsApp listener, REST API, SSE stream
+localStore.js        → Local JSON-file datastore (replaces Firebase entirely)
+localSchema.js        → Schema + helpers on top of localStore.js
+app/                  → Next.js UI (onboarding + inbox)
+components/          → Inbox UI components (piles, message cards, sensory panel, panic button)
+electron/            → Desktop shell that wraps the bridge + UI in a native window
 ```
 
----
-
-## Prerequisites
-
-- Node.js 18+
-- A [Groq API key](https://console.groq.com) (free)
-- A [Firebase project](https://console.firebase.google.com) (free tier is fine)
-- A [Resend account](https://resend.com) for email alerts (free tier)
-- A [Netlify account](https://netlify.com) for UI hosting (free tier)
+No Firebase, no external account, no cloud database. Your profile, messages, embeddings, and settings live in a single JSON file under `data/` on your machine (see `AXON_DATA_DIR` below).
 
 ---
 
-## Part 1 — Firebase Setup
-
-1. Go to [Firebase Console](https://console.firebase.google.com) → New project
-2. Enable **Firestore Database** (production mode)
-3. Go to **Project Settings → Service Accounts → Generate new private key**
-4. Save the downloaded JSON — you'll need values from it for `.env`
-5. Go to **Firestore → Rules** and paste the contents of `bridge/firebaseRules.json`
-6. Go to **Project Settings → General** and copy your Web App config (for the UI `.env`)
-
----
-
-## Part 2 — Bridge Setup (Node.js backend)
+## Run it today (fastest path — no packaging needed)
 
 ```bash
-cd bridge
+npm install
 cp .env.example .env
 ```
 
-Fill in your `.env`:
+Fill in `.env`:
 
 ```
-FIREBASE_PROJECT_ID=your-project-id
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@your-project.iam.gserviceaccount.com
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-
-GROQ_API_KEY=gsk_...
-
-RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=safety@yourdomain.com
-
-VAPID_PUBLIC_KEY=...
-VAPID_PRIVATE_KEY=...
-VAPID_SUBJECT=mailto:you@yourdomain.com
-
-AUTH_SECRET=any-random-string-minimum-32-characters-long
-ALLOWED_ORIGINS=https://your-netlify-app.netlify.app
-
-GARGOYLE_COOLDOWN_SECONDS=300
+GROQ_API_KEY=gsk_...          # free at console.groq.com
+AUTH_SECRET=<32+ random chars>
+ALLOWED_ORIGINS=http://localhost:3001
 ```
 
-**Generate VAPID keys:**
-```bash
-npx web-push generate-vapid-keys
-```
+No Groq key yet? Leave `GROQ_API_KEY` unset and set `AXON_TRIAL_GROQ_API_KEY` instead (see **Trial key** below) — the app falls back to it automatically so there's zero setup for a first run.
 
-**Install and run:**
-```bash
-npm install
-node librarian.js
-```
-
-A QR code will appear. Scan it with WhatsApp on your phone.
-
-> ⚠️ The bridge must stay running on a persistent machine (VPS, Railway, Render, etc.) — it cannot run on Netlify. See Part 4.
-
----
-
-## Part 3 — UI Setup (Next.js PWA)
+Then open the real desktop app:
 
 ```bash
-cd ui
+npm run electron:dev
 ```
 
-Create a `.env.local` file:
+This spawns the bridge and the Next.js UI as child processes and opens a native window pointed at them — nothing to configure, no browser tab to find. First run walks you through onboarding (phone number, preferences, safety word, optional API key), then drops you into the inbox.
 
-```
-NEXT_PUBLIC_BRIDGE_URL=https://your-bridge-url.com
-NEXT_PUBLIC_FIREBASE_API_KEY=your-firebase-web-api-key
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
-NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
-```
-
-**Install and run locally:**
-```bash
-npm install
-npm run dev
-```
-
-Open [http://localhost:3001](http://localhost:3001)
-
----
-
-## Part 4 — Deploy UI to Netlify
-
-### Option A: Netlify CLI (fastest)
+Prefer a browser instead of the desktop shell? Run the two dev servers directly:
 
 ```bash
-npm install -g netlify-cli
-cd ui
-npm run build
-netlify deploy --prod --dir=.next
-```
-
-### Option B: Netlify Dashboard (recommended)
-
-1. Push your repo to GitHub
-2. Go to [Netlify](https://app.netlify.com) → **Add new site → Import from Git**
-3. Select your repo
-4. Set these build settings:
-   - **Base directory:** `ui`
-   - **Build command:** `npm run build`
-   - **Publish directory:** `ui/.next`
-5. Go to **Site settings → Environment variables** and add:
-   ```
-   NEXT_PUBLIC_BRIDGE_URL=https://your-bridge-url.com
-   NEXT_PUBLIC_FIREBASE_API_KEY=...
-   NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
-   NEXT_PUBLIC_FIREBASE_APP_ID=...
-   ```
-6. Click **Deploy site**
-7. Go to **Site settings → Domain** to set your custom domain or use the `.netlify.app` URL
-
-### Add netlify.toml (required for Next.js on Netlify)
-
-Create `ui/netlify.toml`:
-```toml
-[build]
-  base = "ui"
-  command = "npm run build"
-  publish = ".next"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
-```
-
-Install the Netlify Next.js plugin:
-```bash
-cd ui
-npm install @netlify/plugin-nextjs --save-dev
+npm run dev        # bridge on :3000
+npm run next:dev   # UI on :3001
 ```
 
 ---
 
-## Part 5 — Deploy Bridge (Node.js backend)
+## Building an installer
 
-The bridge cannot run on Netlify (it needs a persistent process for WhatsApp). Options:
-
-### Railway (easiest, free tier available)
-1. Go to [Railway](https://railway.app) → New Project → Deploy from GitHub
-2. Select your repo → set root directory to `bridge`
-3. Add all your `.env` variables in Railway's dashboard
-4. Railway auto-detects Node.js and runs `node librarian.js`
-5. Copy the Railway URL → set as `NEXT_PUBLIC_BRIDGE_URL` in Netlify
-
-### Render
-1. Go to [Render](https://render.com) → New Web Service
-2. Connect your GitHub repo, set root to `bridge`
-3. Build command: `npm install`
-4. Start command: `node librarian.js`
-5. Add env vars, deploy
-
-### VPS (DigitalOcean, Hetzner, etc.)
 ```bash
-git clone your-repo
-cd your-repo/bridge
-npm install
-cp .env.example .env  # fill in values
-# Run with PM2 for persistence
-npm install -g pm2
-pm2 start librarian.js --name neuro-librarian
-pm2 save
-pm2 startup
+npm run dist:mac    # produces a .dmg — must be run on a real Mac
+npm run dist:win    # produces an .exe (nsis installer)
 ```
 
----
+Both use `electron-builder` (see the `build` block in `package.json`). The **macOS build must run on an actual Mac** — Apple doesn't allow cross-signing a `.dmg` from Linux/Windows. The **Windows build can be produced from any OS** via `electron-builder`'s bundled Wine, but hasn't been verified end-to-end outside this repo's dev sandbox (the sandbox this was built in has no outbound access to download Electron's platform binaries, so the actual `.exe`/`.dmg` build has not been run to completion here — only the config and the underlying dev app have been verified).
 
-## Part 6 — PWA Install (Chrome shortcut)
-
-Once deployed to Netlify:
-
-1. Open your Netlify URL in Chrome on your phone
-2. Tap the browser menu (3 dots) → **Add to Home Screen**
-3. The app installs as a PWA with offline support
+Neither installer is code-signed. Unsigned builds will trigger a Gatekeeper/SmartScreen warning on first launch — expected until you have a signing certificate.
 
 ---
 
-## Security checklist before going live
+## Trial key (zero-setup first run)
+
+`config.js` resolves the Groq key in this order: **user-provided key → `GROQ_API_KEY` env var → `AXON_TRIAL_GROQ_API_KEY`**. Set the trial env var (or paste the key directly into the `TRIAL_KEYS.GROQ_API_KEY` fallback in `config.js`) if you want people to be able to download and run AXON with literally no setup. Swap it for your own key before any real distribution — it's meant for a trial, not production traffic.
+
+---
+
+## What's NOT done yet
+
+Being upfront about the gap between "runs today" and "a real product":
+
+- **Standalone Android app** (on-device vector DB + offline AI) — not started. This is a substantial separate build, not a packaging variant of the desktop app.
+- **iOS / Android companion apps** — not started (dropped from this session's scope to focus on Mac/Windows).
+- **Google Sign-In / cross-device encrypted sync** — not started. `TRIAL_KEYS`/BYOK exists for AI providers only; there's no account system or sync protocol yet.
+- **Code signing & notarization** for the Mac/Windows installers — not set up; builds will show OS security warnings.
+- **App icons** — `manifest.json`/`layout.jsx` reference `/icons/icon-192.png` etc. that don't exist yet; add real icon files under `public/icons/`.
+- **whatsapp-web.js + Puppeteer bundle size** — packaging Chromium (via Puppeteer) inside an Electron app (which already ships its own Chromium) will produce a large installer. Worth revisiting — e.g. pointing Puppeteer at Electron's own Chromium — before wide distribution.
+- The original relationship-memory/multi-connector vision from the AXON PRD (Gmail/Slack connectors, semantic search across platforms, reminder engine) is a different, larger scope than this WhatsApp-bridge codebase currently covers — see `TODO.md`.
+
+---
+
+## Security note
+
+Rotate any credentials that were ever committed to this repo's git history before relying on it — check `TODO.md` / recent commit messages for details if you're picking this up fresh.
+
+---
+
+## Original security checklist (still applies)
 
 - [ ] `.env` is in `.gitignore` and never committed
 - [ ] `AUTH_SECRET` is at least 32 random characters
-- [ ] `ALLOWED_ORIGINS` is set to your exact Netlify URL
-- [ ] Firebase rules are deployed (not in test mode)
-- [ ] `.wwebjs_auth/` is in `.gitignore` (WhatsApp session)
-
----
-
-## File count
-
-| Location | Files |
-|---|---|
-| `bridge/` | 20 files |
-| `ui/` | 14 files |
-| Root | 3 files (.gitignore, README, netlify.toml) |
-| **Total** | **37 files** |
+- [ ] `ALLOWED_ORIGINS` is set to your exact origin(s)
+- [ ] `data/` (local datastore) is never committed — it's gitignored, but double-check before pushing

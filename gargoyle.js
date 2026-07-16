@@ -243,7 +243,7 @@ async function sendEmailAlert(toEmail, toName, message, userKeys = null) {
   await resend.emails.send({
     from: config.fromEmail,
     to: toEmail,
-    subject: "🚨 Safety Alert — Neuro-Librarian",
+    subject: "🚨 Safety Alert — AXON",
     text: message,
   });
 }
