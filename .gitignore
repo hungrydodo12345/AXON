@@ -30,3 +30,10 @@ Thumbs.db
 # ── PWA generated files ──
 public/sw.js
 public/workbox-*.js
+
+# AXON website: local test screenshots
+site/shots/
+site/tests/shots/
+
+# Never commit a vault file
+*.axon

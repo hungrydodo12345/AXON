@@ -1,7 +1,21 @@
-[build]
-  base = "ui"
-  command = "npm run build"
-  publish = ".next"
+# AXON website — deploys the self-contained ./site folder.
+#
+# No build step and no dependencies: Netlify just publishes site/public and
+# (optionally) runs the one function in site/functions for the free trial.
+# `base` keeps Netlify from installing the old desktop app's packages (Electron, Next.js)
+# that live in the repo root. All paths below are relative to `base`.
+#
+# Free-trial switch: in Netlify → Site configuration → Environment variables, add
+#   GROQ_API_KEY = <a Groq key>
+# Leave it out and the site works the same; the "Try it free" option just hides itself.
 
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
+[build]
+  base = "site"
+  publish = "public"
+  functions = "functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[functions]
+  node_bundler = "esbuild"

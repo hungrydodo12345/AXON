@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AXON — brochure</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --surface-2: #efede8; --text: #1d1c1a; --muted: #5d5953; --line: #dcd8cf;
+    --accent: #3556c8; --accent-soft: #e6ebfb; --ok: #1d724a; --ok-soft: #e1f2e8; --warn: #84560a; --warn-soft: #faefd6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--text); line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; height: 297mm; padding: 16mm 16mm 14mm; background: var(--bg); position: relative; overflow: hidden; page-break-after: always; display: flex; flex-direction: column; gap: 6mm; }
+  .page:last-child { page-break-after: auto; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: 40pt; line-height: 1.05; letter-spacing: -0.02em; font-weight: 750; }
+  h2 { font-size: 22pt; letter-spacing: -0.01em; font-weight: 700; }
+  h3 { font-size: 12.5pt; font-weight: 700; }
+  p { font-size: 10.5pt; color: var(--muted); }
+  .brand { display: flex; align-items: center; gap: 3mm; font-weight: 800; letter-spacing: 0.06em; font-size: 14pt; }
+  .mark { width: 10mm; height: 10mm; border-radius: 3mm; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 13pt; letter-spacing: 0; }
+  .eyebrow { font-size: 8.5pt; font-weight: 750; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  .pills { display: flex; gap: 2.5mm; flex-wrap: wrap; }
+  .pill { background: var(--surface); border: 0.3mm solid var(--line); border-radius: 99px; padding: 1.6mm 4mm; font-size: 9.5pt; font-weight: 650; color: var(--text); }
+  .pill b { color: var(--ok); margin-right: 1.5mm; }
+  .frame { border-radius: 4mm; overflow: hidden; border: 0.3mm solid var(--line); box-shadow: 0 2mm 8mm rgba(30,28,24,0.14); background: #fff; }
+  .frame img { display: block; width: 100%; }
+  .card { background: var(--surface); border: 0.3mm solid var(--line); border-radius: 4mm; padding: 5mm; display: flex; flex-direction: column; gap: 2mm; }
+  .card.soft { background: var(--accent-soft); border-color: transparent; }
+  .card.ok { background: var(--ok-soft); border-color: transparent; }
+  .num { width: 9mm; height: 9mm; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 750; font-size: 11pt; flex: none; }
+  .step { display: flex; gap: 4mm; align-items: flex-start; }
+  .step h3 { margin-bottom: 0.8mm; }
+  code, .file { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9pt; background: var(--surface-2); border-radius: 1.5mm; padding: 0.6mm 2mm; color: var(--text); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; }
+  .tag { display: inline-block; font-size: 8pt; font-weight: 700; padding: 0.7mm 2.4mm; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-right: 1mm; }
+  ul { margin: 0; padding-left: 4.5mm; } li { font-size: 10pt; color: var(--muted); margin: 0.9mm 0; } li b { color: var(--text); }
+  .foot { margin-top: auto; display: flex; justify-content: space-between; align-items: center; font-size: 8.5pt; color: var(--muted); border-top: 0.3mm solid var(--line); padding-top: 3mm; }
+  /* vault diagram */
+  .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 2.5mm; }
+  .node { background: var(--surface); border: 0.3mm solid var(--line); border-radius: 3.5mm; padding: 3.5mm; text-align: center; }
+  .node b { display: block; font-size: 10.5pt; color: var(--text); }
+  .node span { font-size: 8.5pt; color: var(--muted); }
+  .node.file { background: var(--accent-soft); border-color: transparent; }
+  .arrow { color: var(--accent); font-size: 14pt; font-weight: 700; text-align: center; }
+  .chips { display: flex; flex-wrap: wrap; gap: 2mm; }
+  .chip { background: var(--surface); border: 0.3mm solid var(--line); border-radius: 2.5mm; padding: 1.4mm 3mm; font-size: 9.5pt; font-weight: 650; }
+  .qa dt { font-weight: 700; font-size: 10.5pt; color: var(--text); margin-top: 2.5mm; } .qa dd { margin: 0.5mm 0 0; font-size: 10pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ═════════ PAGE 1 — cover ═════════ -->
+<section class="page">
+  <div class="brand"><div class="mark">A</div>AXON</div>
+  <div style="margin-top: 6mm; display:flex; flex-direction:column; gap:5mm;">
+    <div class="eyebrow">A calm companion for messages</div>
+    <h1>Messages,<br>made manageable.</h1>
+    <p style="font-size:13pt; max-width: 150mm; color:#43403b;">AXON explains the tone of a message, offers calm ways to reply, and remembers the people in your life. All of it lives in one private file that only you hold.</p>
+    <div class="pills">
+      <span class="pill"><b>✓</b>No account</span>
+      <span class="pill"><b>✓</b>Nothing stored on a server</span>
+      <span class="pill"><b>✓</b>Works with any AI</span>
+    </div>
+  </div>
+  <div class="frame" style="margin-top: 4mm;"><img src="img/analysis-desktop.png" alt="AXON showing a message, a plain-words meaning, its tone and reply ideas"></div>
+  <p style="font-size: 10pt;"><b style="color:var(--text)">Made for</b> neurodivergent people, people with social anxiety or the broader autism phenotype, and anyone who overthinks a reply.</p>
+  <div class="foot"><span>The picture above is a made-up example message.</span><span>1 / 4</span></div>
+</section>
+
+<!-- ═════════ PAGE 2 — how it works ═════════ -->
+<section class="page">
+  <div class="brand"><div class="mark">A</div>AXON</div>
+  <div><div class="eyebrow">How it works</div><h2 style="margin-top:2mm;">Four steps. About a minute.</h2></div>
+
+  <div style="display:flex; flex-direction:column; gap:3.6mm;">
+    <div class="step"><div class="num">1</div><div><h3>Make your vault</h3><p>Choose a passphrase. A few random words work well, like <code>maple orbit quiet bicycle</code>. Your vault is a single encrypted file. Nobody can read it without that passphrase, not even us.</p></div></div>
+    <div class="step"><div class="num">2</div><div><h3>Add a message</h3><p>Paste one in, or import a WhatsApp chat export. People are added for you automatically and grouped as Work or Personal.</p></div></div>
+    <div class="step"><div class="num">3</div><div><h3>Make sense of it</h3><p>Get a short summary, what they probably mean in plain words, how it sounds (with an honest confidence level), what they're asking, and three reply ideas written as you.</p></div></div>
+    <div class="step"><div class="num">4</div><div><h3>Save your vault</h3><p>Press Save and your updated vault downloads as a file. Next time, open that file and carry on, exactly where you left off.</p></div></div>
+  </div>
+
+  <div class="card soft" style="gap:3mm; padding:4.5mm;">
+    <h3>Your vault, explained</h3>
+    <div class="flow">
+      <div class="node"><b>Your device</b><span>You choose where the file lives</span></div>
+      <div class="arrow">⇄</div>
+      <div class="node file"><b>Your .axon file</b><span>Encrypted. Only your passphrase opens it</span></div>
+      <div class="arrow">⇄</div>
+      <div class="node"><b>The AXON site</b><span>Opens it in your browser. Keeps nothing</span></div>
+    </div>
+    <p style="font-size:9.5pt;">Files are named like <span class="file">axon-vault_r12_2026-10-07_1430.axon</span>. The <b style="color:var(--text)">r12</b> is the revision, which goes up by one every time you save, and the rest is the date and time. Always open the highest number.</p>
+  </div>
+
+  <div class="card ok" style="gap:1.5mm; padding:4.5mm;">
+    <h3>Keep your vault safe</h3>
+    <ul>
+      <li><b>Save often.</b> The bar at the top says “Unsaved changes” until you do, and your browser warns you before you leave.</li>
+      <li><b>Keep two copies.</b> One in your cloud drive or on a USB stick, and an older revision as a backup.</li>
+      <li><b>Use a phrase, not a word.</b> Four random words are easier to remember and stronger than a short password.</li>
+      <li><b>On a shared computer,</b> choose “Close vault” when you're done. It clears everything from memory.</li>
+    </ul>
+  </div>
+
+  <div class="foot"><span>Closing the page clears everything from memory. Only your saved file remains.</span><span>2 / 4</span></div>
+</section>
+
+<!-- ═════════ PAGE 3 — what you get ═════════ -->
+<section class="page">
+  <div class="brand"><div class="mark">A</div>AXON</div>
+  <div><div class="eyebrow">What you get</div><h2 style="margin-top:2mm;">Understand first. Reply when you're ready.</h2></div>
+
+  <div style="display:grid; grid-template-columns: 1fr 62mm; gap: 6mm; align-items: start;">
+    <div style="display:flex; flex-direction:column; gap:3.5mm;">
+      <div class="card"><h3>Plain meaning</h3><p>Hints, idioms and sarcasm are restated as exactly what's meant, in simple words.</p></div>
+      <div class="card"><h3>Tone, with honesty</h3><p>AXON points at the exact words behind its read and says how sure it is. Low confidence means a coin flip. It never pretends to know what someone feels for certain.</p></div>
+      <div class="card"><h3>Three reply ideas</h3><p><span class="tag">Warm</span><span class="tag">Short and simple</span><span class="tag">Kind “not right now”</span><br>Written as you. Edit one, then copy it into your chat app.</p></div>
+      <div class="card"><h3>People, remembered</h3><p>Notes on how you know them, their history with you, what's still waiting for a reply, and a short “story so far”.</p></div>
+      <div class="card"><h3>Ask your own memory</h3><p>“What's the story with Sam?” “Who am I waiting to reply to?” AXON looks it up in your vault and shows how it found the answer. Plain keyword search needs no AI at all.</p></div>
+    </div>
+    <div class="frame"><img src="img/analysis-mobile.png" alt="AXON on a phone"></div>
+  </div>
+
+  <div class="card ok">
+    <h3>Comfort settings, your way</h3>
+    <div class="chips" style="margin-top:1mm;">
+      <span class="chip">Say it literally</span><span class="chip">Explain tone and sarcasm</span><span class="chip">Name the feelings</span><span class="chip">Keep it short</span><span class="chip">Gentle wording</span><span class="chip">Light, dark, or large text</span>
+    </div>
+    <p style="font-size:9.5pt; margin-top:1.5mm;">Start from a preset for autism, ADHD or social anxiety, then change anything. These are comfort settings, not diagnoses.</p>
+  </div>
+  <div class="foot"><span>AXON gives best guesses, not verdicts. It is not a therapist or medical advice.</span><span>3 / 4</span></div>
+</section>
+
+<!-- ═════════ PAGE 4 — privacy, AI, FAQ ═════════ -->
+<section class="page">
+  <div class="brand"><div class="mark">A</div>AXON</div>
+  <div class="grid2" style="margin-top: 1mm;">
+    <div class="card" style="gap:2.5mm;">
+      <div class="eyebrow">Private by design</div>
+      <ul>
+        <li><b>No account, no database, no tracking.</b> Nothing about you is stored on a server.</li>
+        <li><b>Encrypted on your device</b> (AES-256) before you ever save.</li>
+        <li><b>The AI only sees what you send it:</b> the message you ask about, plus a little context. Never your whole vault.</li>
+        <li><b>You hold the only copy.</b> Keep it in your cloud drive, on a USB stick, or both.</li>
+      </ul>
+    </div>
+    <div class="card" style="gap:2.5mm;">
+      <div class="eyebrow">Bring any AI</div>
+      <div class="chips"><span class="chip">Groq</span><span class="chip">OpenAI</span><span class="chip">Claude</span><span class="chip">Gemini</span><span class="chip">OpenRouter</span><span class="chip">Ollama</span><span class="chip">LM Studio</span><span class="chip">Any OpenAI-compatible</span></div>
+      <p style="font-size:9.5pt;">Your message goes straight from your browser to your provider. Run a model on your own computer and nothing leaves it at all.</p>
+      <p style="font-size:9.5pt;"><b style="color:var(--text)">Just want to look around?</b> “Try it free” uses a shared connection, if the site has switched it on.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow">Quick answers</div>
+    <dl class="qa" style="margin:0;">
+      <dt>What if I forget my passphrase?</dt><dd>It can't be recovered by anyone, which is what keeps your vault private. Choose something memorable, and keep an older copy of your vault as a backup.</dd>
+      <dt>Can I use it on my phone and my laptop?</dt><dd>Yes. Copy your .axon file to the other device and open it there. Carry one file forward at a time. The highest r-number is the newest.</dd>
+      <dt>Is the tone read always right?</dt><dd>No. It's a best guess from the words alone, so it shows its evidence and confidence. For anything important, you can always ask the person.</dd>
+      <dt>Can I import my WhatsApp chats?</dt><dd>Yes. In WhatsApp choose Export chat → Without media, then import the file. Imported history stays in your vault and is never sent to an AI unless you open a message and ask.</dd>
+    </dl>
+  </div>
+
+  <div class="card soft" style="gap:2.5mm;">
+    <div class="eyebrow">Get started</div>
+    <div class="grid3" style="margin-top:1mm;">
+      <div><b style="font-size:11pt;">1 · Open the site</b><p style="font-size:9.5pt;">Choose “Start a new vault”.</p></div>
+      <div><b style="font-size:11pt;">2 · Take the tour</b><p style="font-size:9.5pt;">A one-minute walk-through with an example message. Nothing to set up.</p></div>
+      <div><b style="font-size:11pt;">3 · Add your first message</b><p style="font-size:9.5pt;">Paste it in, then save your vault.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>Need help later? The guide is built in: press the “?” in the top bar.</span><span>4 / 4</span></div>
+</section>
+
+</body>
+</html>

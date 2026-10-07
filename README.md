@@ -1,5 +1,8 @@
 # AXON
 
+> **New: the website.** The recommended way to run AXON is now the self-contained site in [`site/`](site/README.md): no database, no account, no build step. Everything a user owns lives in one encrypted `.axon` vault file they download and re-open, and it works with any AI provider (or a free trial). It deploys to Netlify as-is. See [`site/README.md`](site/README.md). The desktop prototype described below is kept for reference.
+
+
 A local-first personal cognitive layer — it remembers relationships, not just messages. Local desktop app (Next.js UI wrapped in Electron) with everything stored on your machine.
 
 ---

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AXON — messages, made manageable</title>
+  <meta name="description" content="AXON explains the tone of messages, suggests calm replies, and remembers the people in your life. Your data lives in one encrypted file that only you hold.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151513" media="(prefers-color-scheme: dark)">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div id="root"></div>
+  <div id="toasts" role="status" aria-live="polite"></div>
+  <noscript>
+    <div class="noscript">
+      <h1>AXON needs JavaScript</h1>
+      <p>AXON runs entirely in your browser so your messages never have to be stored on a server. Please turn JavaScript on for this site and reload.</p>
+    </div>
+  </noscript>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
