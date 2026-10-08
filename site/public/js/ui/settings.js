@@ -1,9 +1,11 @@
 import { h, fmtFull, pluralize } from "../utils.js";
-import { app, mutate, touch, emit, applyAppearance, saveVault, closeVault } from "../state.js";
+import { app, mutate, touch, emit, applyAppearance, saveVault, closeVault, deviceEnabled, enableDeviceCopy, disableDeviceCopy, saveDeviceCopy, flushDeviceSave } from "../state.js";
+import { deviceStorageAvailable } from "../device.js";
+import { installStatus } from "./install.js";
 import { PRESETS, presetById, isConfigured, testConnection, describeProvider } from "../providers.js";
 import { NEED_PRESETS, NEED_LABELS } from "../analyze.js";
 import { hasSample, removeSample } from "../sample.js";
-import { icon, field, switchRow, segmented, spinner, toast, chip, openDialog } from "./common.js";
+import { icon, field, switchRow, segmented, spinner, toast, chip, openDialog, confirmDialog } from "./common.js";
 import { openChangePassphrase } from "./dialogs.js";
 import { openHelp } from "./help.js";
 
@@ -14,7 +16,7 @@ export function renderSettings({ onTour } = {}) {
   const root = h("div", { class: "view stack loose", id: "view-settings" });
   root.append(h("div", { class: "view-head" }, h("h1", { text: "Settings" })));
 
-  root.append(needsCard(v), providerCard(v), lookCard(v), vaultCard(v, onTour), privacyCard());
+  root.append(needsCard(v), providerCard(v), offlineCard(v), lookCard(v), vaultCard(v, onTour), privacyCard());
   return root;
 }
 
@@ -169,10 +171,11 @@ export async function doSave() {
 }
 
 export async function requestClose() {
+  await flushDeviceSave();
   if (!app.dirty) { closeVault(); toast("Vault closed. Everything was cleared from memory."); return; }
   const d = openDialog({
     title: "Save before closing?",
-    body: h("p", { text: "You have changes that aren't in a saved file yet. If you close without saving, they're gone." }),
+    body: h("p", { text: deviceEnabled() ? "Your latest changes are kept in the encrypted copy on this device, but they aren't in a vault file yet. Save a file too, to be safe." : "You have changes that aren't in a saved file yet. If you close without saving, they're gone." }),
     actions: [
       { label: "Cancel", value: "cancel" },
       { label: "Close without saving", kind: "danger", value: "discard" },
@@ -193,4 +196,42 @@ function privacyCard() {
       h("li", { text: "Only the message you choose to analyse (plus a little context) is sent to your AI." }),
       h("li", { text: "Closing the vault clears everything from memory." })),
     h("button", { type: "button", class: "link-btn", onclick: () => openHelp({ section: "privacy" }) }, "Read the full privacy details"));
+}
+
+// ── offline + this device ──
+function offlineCard(v) {
+  const on = deviceEnabled();
+  const available = deviceStorageAvailable();
+  const when = app.device.savedAt ? fmtFull(app.device.savedAt) : null;
+  return h("section", { class: "card stack", id: "offline-card", "aria-labelledby": "off-h" },
+    h("h2", { id: "off-h", text: "Offline and this device" }),
+    h("div", { class: "row" }, icon(app.pwa.offlineReady ? "check" : "clock"),
+      h("span", { text: app.pwa.offlineReady ? "AXON is ready to work offline. Open your vault file with no connection and read, search and explore your map." : "Getting AXON ready for offline use… (needs a secure https connection)" })),
+    installStatus(),
+    h("div", { class: "stack tight" },
+      switchRow({
+        id: "device-copy", title: "Keep an encrypted copy on this device", checked: on,
+        hint: available ? "Reopen your vault here without choosing a file, even offline. Off by default." : "This browser can't store a copy.",
+        onChange: async (val) => {
+          if (val) {
+            const ok = await confirmDialog({
+              title: "Keep an encrypted copy on this device?",
+              message: [
+                "AXON will store your vault in this browser, locked with your passphrase, and update it as you work.",
+                "Anyone using this browser profile could see that a copy exists, but can't read it without your passphrase. Don't turn this on for a shared or public computer.",
+                "Browsers can clear stored data, so keep saving vault files too.",
+              ],
+              confirmLabel: "Turn it on",
+            });
+            if (ok) { try { await enableDeviceCopy(); toast("Kept on this device, encrypted."); } catch (e) { toast(e.message, { kind: "error" }); } }
+          } else {
+            const ok = await confirmDialog({ title: "Remove the copy from this device?", message: "The saved copy in this browser is deleted. Your vault files are not touched.", confirmLabel: "Remove it", danger: true });
+            if (ok) { await disableDeviceCopy(); toast("Removed from this device."); }
+          }
+          emit();
+        },
+      })),
+    on ? h("div", { class: "row wrap" },
+      app.device.status === "error" ? h("div", { class: "err", role: "alert", text: app.device.error }) : h("span", { class: "hint", text: when ? `Last kept on this device: ${when}.` : "Saving…" }),
+      h("button", { type: "button", class: "btn sm", onclick: async () => { if (await saveDeviceCopy()) toast("Saved on this device."); else toast(app.device.error || "Couldn't save.", { kind: "error" }); emit(); } }, "Save now")) : null);
 }

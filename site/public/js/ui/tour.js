@@ -62,6 +62,12 @@ const STEPS = [
     body: ["Everyone you hear from appears here, grouped as Work or Personal. Add how you know them and a few notes, and AXON reads their messages with that context.", "Open someone to write “the story so far” of your history together."],
   },
   {
+    id: "map", target: "#nav-map",
+    before: () => { ensureSample({ select: false }); setView("map"); },
+    title: "Your map",
+    body: ["Everything connects here: the people in your life, the topics you keep returning to, what's waiting on you, and what helps with each person. It's drawn from your own messages, on your device.", "Drag to rotate it in 3D, or switch to Flat or List for a calmer view."],
+  },
+  {
     id: "ask", target: "#nav-ask",
     before: () => setView("ask"),
     title: "Ask your own memory",
@@ -80,7 +86,7 @@ const STEPS = [
     id: "save", target: "#save-btn",
     before: () => setView("inbox"),
     title: "Save to keep your work",
-    body: ["Press Save whenever you finish. You'll get a file like axon-vault_r1_2026-10-07_1430.axon. Keep it somewhere safe, and open it next time.", "Your passphrase is the only key. Nobody can recover it for you."],
+    body: ["Press Save whenever you finish. You'll get a file like axon-vault_r1_2026-10-07_1430.axon. Keep it somewhere safe, and open it next time.", "Want it on this device too? Settings can install AXON for offline use and, if you choose, keep an encrypted copy here. Your passphrase is the only key. Nobody can recover it for you."],
     final: true,
   },
 ];

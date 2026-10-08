@@ -26,7 +26,9 @@
   .pill { background: var(--surface); border: 0.3mm solid var(--line); border-radius: 99px; padding: 1.6mm 4mm; font-size: 9.5pt; font-weight: 650; color: var(--text); }
   .pill b { color: var(--ok); margin-right: 1.5mm; }
   .frame { border-radius: 4mm; overflow: hidden; border: 0.3mm solid var(--line); box-shadow: 0 2mm 8mm rgba(30,28,24,0.14); background: #fff; }
+  .frame { flex: none; }
   .frame img { display: block; width: 100%; }
+  
   .card { background: var(--surface); border: 0.3mm solid var(--line); border-radius: 4mm; padding: 5mm; display: flex; flex-direction: column; gap: 2mm; }
   .card.soft { background: var(--accent-soft); border-color: transparent; }
   .card.ok { background: var(--ok-soft); border-color: transparent; }
@@ -68,7 +70,7 @@
   </div>
   <div class="frame" style="margin-top: 4mm;"><img src="img/analysis-desktop.png" alt="AXON showing a message, a plain-words meaning, its tone and reply ideas"></div>
   <p style="font-size: 10pt;"><b style="color:var(--text)">Made for</b> neurodivergent people, people with social anxiety or the broader autism phenotype, and anyone who overthinks a reply.</p>
-  <div class="foot"><span>The picture above is a made-up example message.</span><span>1 / 4</span></div>
+  <div class="foot"><span>The picture above is a made-up example message.</span><span>1 / 5</span></div>
 </section>
 
 <!-- ═════════ PAGE 2 — how it works ═════════ -->
@@ -105,7 +107,7 @@
     </ul>
   </div>
 
-  <div class="foot"><span>Closing the page clears everything from memory. Only your saved file remains.</span><span>2 / 4</span></div>
+  <div class="foot"><span>Closing the page clears everything from memory. Only your saved file remains (and your encrypted on-device copy, if you chose one).</span><span>2 / 5</span></div>
 </section>
 
 <!-- ═════════ PAGE 3 — what you get ═════════ -->
@@ -119,22 +121,47 @@
       <div class="card"><h3>Tone, with honesty</h3><p>AXON points at the exact words behind its read and says how sure it is. Low confidence means a coin flip. It never pretends to know what someone feels for certain.</p></div>
       <div class="card"><h3>Three reply ideas</h3><p><span class="tag">Warm</span><span class="tag">Short and simple</span><span class="tag">Kind “not right now”</span><br>Written as you. Edit one, then copy it into your chat app.</p></div>
       <div class="card"><h3>People, remembered</h3><p>Notes on how you know them, their history with you, what's still waiting for a reply, and a short “story so far”.</p></div>
+      <div class="card"><h3>What helps with each person</h3><p>Record your own accommodations, like <span class="tag">needs time to reply</span><span class="tag">prefers text to calls</span> and AXON shapes its reply ideas around them. They appear on your map too.</p></div>
       <div class="card"><h3>Ask your own memory</h3><p>“What's the story with Sam?” “Who am I waiting to reply to?” AXON looks it up in your vault and shows how it found the answer. Plain keyword search needs no AI at all.</p></div>
     </div>
     <div class="frame"><img src="img/analysis-mobile.png" alt="AXON on a phone"></div>
   </div>
 
-  <div class="card ok">
+  <div class="foot"><span>AXON gives best guesses, not verdicts. It is not a therapist or medical advice.</span><span>3 / 5</span></div>
+</section>
+
+<!-- ═════════ PAGE 4 — map + offline ═════════ -->
+<section class="page" style="gap:4mm;">
+  <div class="brand"><div class="mark">A</div>AXON</div>
+  <div><div class="eyebrow">The big picture</div><h2 style="margin-top:2mm;">Your people, connected. Even offline.</h2></div>
+  <div class="frame map"><img src="img/map-desktop.png" alt="The AXON map: a person at the centre connected to topics and to what helps"></div>
+  <div class="grid3">
+    <div class="card" style="padding:3.5mm; gap:1mm;"><h3>Shapes, not just colours</h3><p style="font-size:9pt;">People, topics, things waiting on you and what helps each have their own shape, so colour is never the only clue.</p></div>
+    <div class="card" style="padding:3.5mm; gap:1mm;"><h3>3D, Flat or List</h3><p style="font-size:9pt;">Drag to rotate, or choose a calmer flat view or a plain text list. Nothing spins unless you ask.</p></div>
+    <div class="card" style="padding:3.5mm; gap:1mm;"><h3>Built on your device</h3><p style="font-size:9pt;">Worked out locally from your own messages. No AI is needed to draw it.</p></div>
+  </div>
+  <div class="grid2">
+    <div class="card ok" style="gap:2mm;">
+      <h3>Install it. Use it offline.</h3>
+      <ul>
+        <li>Press <b>Install app</b> (or Share → Add to Home Screen on iPhone).</li>
+        <li>Once loaded, AXON opens with <b>no internet</b>: open your vault, then read, search and explore your map.</li>
+        <li>AI features pause politely until you're back online.</li>
+        <li>Optional: keep an <b>encrypted copy on this device</b> and continue without choosing a file.</li>
+      </ul>
+    </div>
+  <div class="card soft" style="gap:2mm;">
     <h3>Comfort settings, your way</h3>
     <div class="chips" style="margin-top:1mm;">
       <span class="chip">Say it literally</span><span class="chip">Explain tone and sarcasm</span><span class="chip">Name the feelings</span><span class="chip">Keep it short</span><span class="chip">Gentle wording</span><span class="chip">Light, dark, or large text</span>
     </div>
     <p style="font-size:9.5pt; margin-top:1.5mm;">Start from a preset for autism, ADHD or social anxiety, then change anything. These are comfort settings, not diagnoses.</p>
   </div>
-  <div class="foot"><span>AXON gives best guesses, not verdicts. It is not a therapist or medical advice.</span><span>3 / 4</span></div>
+  </div>
+  <div class="foot"><span>The picture above is a made-up example. Nothing is shown from any real vault.</span><span>4 / 5</span></div>
 </section>
 
-<!-- ═════════ PAGE 4 — privacy, AI, FAQ ═════════ -->
+<!-- ═════════ PAGE 5 — privacy, AI, FAQ ═════════ -->
 <section class="page">
   <div class="brand"><div class="mark">A</div>AXON</div>
   <div class="grid2" style="margin-top: 1mm;">
@@ -144,7 +171,7 @@
         <li><b>No account, no database, no tracking.</b> Nothing about you is stored on a server.</li>
         <li><b>Encrypted on your device</b> (AES-256) before you ever save.</li>
         <li><b>The AI only sees what you send it:</b> the message you ask about, plus a little context. Never your whole vault.</li>
-        <li><b>You hold the only copy.</b> Keep it in your cloud drive, on a USB stick, or both.</li>
+        <li><b>You hold the only copy.</b> Keep it in your cloud drive, on a USB stick, or both. An optional encrypted copy on this device is off unless you turn it on.</li>
       </ul>
     </div>
     <div class="card" style="gap:2.5mm;">
@@ -161,6 +188,7 @@
       <dt>What if I forget my passphrase?</dt><dd>It can't be recovered by anyone, which is what keeps your vault private. Choose something memorable, and keep an older copy of your vault as a backup.</dd>
       <dt>Can I use it on my phone and my laptop?</dt><dd>Yes. Copy your .axon file to the other device and open it there. Carry one file forward at a time. The highest r-number is the newest.</dd>
       <dt>Is the tone read always right?</dt><dd>No. It's a best guess from the words alone, so it shows its evidence and confidence. For anything important, you can always ask the person.</dd>
+      <dt>Does it work without internet?</dt><dd>Yes, once it has loaded once. Open your vault file (or your on-device copy) and read, search and explore your map. Only the AI parts need a connection.</dd>
       <dt>Can I import my WhatsApp chats?</dt><dd>Yes. In WhatsApp choose Export chat → Without media, then import the file. Imported history stays in your vault and is never sent to an AI unless you open a message and ask.</dd>
     </dl>
   </div>
@@ -173,7 +201,7 @@
       <div><b style="font-size:11pt;">3 · Add your first message</b><p style="font-size:9.5pt;">Paste it in, then save your vault.</p></div>
     </div>
   </div>
-  <div class="foot"><span>Need help later? The guide is built in: press the “?” in the top bar.</span><span>4 / 4</span></div>
+  <div class="foot"><span>Need help later? The guide is built in: press the “?” in the top bar.</span><span>5 / 5</span></div>
 </section>
 
 </body>

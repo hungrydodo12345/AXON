@@ -3,7 +3,9 @@
  * keeps focus/scroll steady across re-renders.
  */
 
-import { app, subscribe, subscribeLight, emit } from "./state.js";
+import { app, subscribe, subscribeLight, emit, deviceEnabled } from "./state.js";
+import { initPwa } from "./pwa.js";
+import { paintInstall } from "./ui/install.js";
 import { checkTrial } from "./providers.js";
 import { clear, h } from "./utils.js";
 import { renderWelcome } from "./ui/welcome.js";
@@ -11,6 +13,7 @@ import { renderShell, paintStatus } from "./ui/shell.js";
 import { renderInbox } from "./ui/inbox.js";
 import { renderPeople } from "./ui/people.js";
 import { renderAsk } from "./ui/ask.js";
+import { renderMap } from "./ui/graph.js";
 import { renderSettings } from "./ui/settings.js";
 import { startTour } from "./ui/tour.js";
 
@@ -20,6 +23,7 @@ const offeredTour = new Set();
 const VIEWS = {
   inbox: renderInbox,
   people: renderPeople,
+  map: renderMap,
   ask: renderAsk,
   settings: () => renderSettings({ onTour: startTour }),
 };
@@ -62,9 +66,11 @@ function render() {
 
 subscribe(render);
 subscribeLight(paintStatus);
+subscribeLight(paintInstall);
 
 window.addEventListener("beforeunload", (e) => {
-  if (app.vault && app.dirty) {
+  // no scary prompt if the latest changes are safely kept on this device
+  if (app.vault && app.dirty && !(deviceEnabled() && app.device.status === "ok")) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -81,6 +87,7 @@ if (blocked) {
   root.replaceChildren(h("main", { class: "welcome", id: "main" }, h("div", { class: "card stack", role: "alert" }, h("h1", { text: "AXON can't start here" }), h("p", { text: blocked }))));
 } else {
   render();
+  initPwa();
 }
 checkTrial().then((available) => {
   app.trial = { checked: true, available };

@@ -46,6 +46,9 @@ const mock = http.createServer((req, res) => {
         asks: ["Review the repository changes"], dates: ["Friday"], reassurance: "",
         replies: [{ style: "warm", text: "Sure, I'll take a look today!" }, { style: "brief", text: "On it." }, { style: "boundary", text: "I can't get to this before Friday, sorry." }],
       });
+    } else if (sys.includes("friendly names to conversation topics")) {
+      const asked = JSON.parse(j.messages.at(-1).content);
+      out = JSON.stringify({ labels: Object.fromEntries(asked.map((t) => [t.id, `Talk: ${t.word}`])) });
     } else if (sys.includes("remember the story")) {
       out = JSON.stringify({ story: "You and Morgan work together on code reviews.", open_loops: ["Review before Friday"], remember: ["Prefers Friday deadlines"] });
     }
@@ -161,7 +164,7 @@ console.log("\nDesktop flow");
       await page.click("#tour-next");
       await page.waitForFunction((t) => document.querySelector("#tour-title")?.textContent !== t, title);
     }
-    if (titles.length !== 9) throw new Error(`expected 9 steps, saw ${titles.length}: ${titles.join(" | ")}`);
+    if (titles.length !== 10) throw new Error(`expected 10 steps, saw ${titles.length}: ${titles.join(" | ")}`);
   });
 
   await step("finishing the tour removes the example data", async () => {
@@ -325,8 +328,8 @@ console.log("\nDesktop flow");
     await page.getByRole("heading", { name: "Start a new vault" }).waitFor();
     const left = await page.evaluate(() => window.__axon.app.vault);
     if (left !== null) throw new Error("vault should be null after close");
-    const storage = await page.evaluate(() => ({ ls: localStorage.length, ss: sessionStorage.length, ck: document.cookie }));
-    if (storage.ls || storage.ss || storage.ck) throw new Error("nothing should ever be stored in the browser: " + JSON.stringify(storage));
+    const storage = await page.evaluate(async () => ({ ls: localStorage.length, ss: sessionStorage.length, ck: document.cookie, idb: (await indexedDB.databases()).map((d) => d.name) }));
+    if (storage.ls || storage.ss || storage.ck || storage.idb.length) throw new Error("nothing should be stored in the browser unless the person opts in: " + JSON.stringify(storage));
   });
 
   await step("reopening: wrong passphrase is rejected, right passphrase restores everything", async () => {
@@ -378,11 +381,278 @@ console.log("\nDesktop flow");
   });
 
   await step("every control has an accessible name", async () => {
-    for (const v of ["inbox", "people", "ask", "settings"]) {
+    for (const v of ["inbox", "people", "map", "ask", "settings"]) {
       await page.click(`#nav-${v}`);
       const bad = await unnamedControls(page);
       if (bad.length) throw new Error(`${v}: ${bad.join(" || ")}`);
     }
+  });
+
+  await ctx.close();
+}
+
+
+console.log("\nPWA, offline, device copy, supports and map");
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, acceptDownloads: true, permissions: ["clipboard-read", "clipboard-write"] });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(10000);
+  currentPage = page;
+  let quiet = false; // going offline makes the browser itself log failed loads; that's not an app problem
+  page.on("console", (m) => { if (!quiet && (m.type() === "error" || m.type() === "warning")) consoleProblems.push(`[${m.type()}] ${m.text()}`); });
+  page.on("pageerror", (e) => consoleProblems.push(`[pageerror] ${e.message}`));
+  await page.goto(`${BASE}/#debug`);
+  const savedPath2 = path.join(SHOTS, "device-test.axon");
+  const idbInfo = () => page.evaluate(async () => {
+    const names = (await indexedDB.databases()).map((d) => d.name);
+    if (!names.includes("axon-device")) return { names, copies: [] };
+    const db = await new Promise((res, rej) => { const r = indexedDB.open("axon-device"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const copies = await new Promise((res) => { const q = db.transaction("copies").objectStore("copies").getAll(); q.onsuccess = () => res(q.result); });
+    db.close();
+    return { names, copies: copies.map((c) => ({ slot: c.slot, revision: c.revision, savedAt: c.savedAt, text: c.text })) };
+  });
+  const openSavedFile = async (file) => {
+    await page.setInputFiles("#ov-file", file);
+    await page.fill("#ov-pass", PASS);
+    await page.getByLabel("Open my vault").getByRole("button", { name: "Unlock" }).click();
+  };
+  const personDetail = async (name) => {
+    await page.click("#nav-people");
+    await page.locator("[id^=person-]").filter({ hasText: name }).first().click();
+    await page.getByRole("heading", { name }).first().waitFor();
+  };
+  const paintedPixels = () => page.evaluate(() => { const c = document.getElementById("graph-canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; });
+
+  await step("manifest + service worker: installable, and the app shell (code only) is cached", async () => {
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.waitForFunction(() => navigator.serviceWorker.controller);
+    const info = await page.evaluate(async () => {
+      const m = await (await fetch(document.querySelector("link[rel=manifest]").href)).json();
+      const keys = await caches.keys();
+      const reqs = (await (await caches.open(keys[0])).keys()).map((r) => new URL(r.url).pathname);
+      return { m, keys, reqs };
+    });
+    if (info.m.display !== "standalone" || !info.m.icons.length) throw new Error("bad manifest");
+    if (!info.keys.length || !info.keys.every((k) => k.startsWith("axon-shell-"))) throw new Error("unexpected caches: " + info.keys);
+    for (const must of ["/js/main.js", "/js/ui/graph.js", "/css/app.css", "/icons/icon-512.png", "/manifest.webmanifest"]) if (!info.reqs.includes(must)) throw new Error("not precached: " + must);
+    if (info.reqs.some((u) => /\.axon$|\/api\//.test(u))) throw new Error("vault data or API calls must never be cached");
+  });
+
+  await step("install button appears when the browser offers install, and prompts on click", async () => {
+    await page.fill("#nv-pass", "typing-in-progress");   // regression: background PWA events must never wipe what someone is typing
+    await page.evaluate(() => {
+      const e = new Event("beforeinstallprompt", { cancelable: true });
+      e.prompt = () => { window.__prompted = true; return Promise.resolve(); };
+      e.userChoice = Promise.resolve({ outcome: "accepted" });
+      window.dispatchEvent(e);
+    });
+    await page.locator("#install-btn").waitFor();
+    if ((await page.inputValue("#nv-pass")) !== "typing-in-progress") throw new Error("the install event re-rendered the page and wiped the passphrase field");
+    await shot(page, "24-welcome-install");
+    await page.click("#install-btn");
+    await page.waitForFunction(() => window.__prompted === true);
+    await page.locator("#install-btn").waitFor({ state: "detached" });
+  });
+
+  await step("offline: the app reloads from cache, opens a vault file, and reading/search still work", async () => {
+    await ctx.setOffline(true);
+    quiet = true;
+    await page.reload();
+    await page.getByRole("heading", { name: /Messages, made manageable/ }).waitFor();
+    await openSavedFile(savedPath);
+    await page.getByRole("heading", { name: "Inbox" }).waitFor();
+    await page.locator("#vault-chip").waitFor();
+    await page.locator(".chip", { hasText: "Offline" }).waitFor();
+    await page.click("#nav-ask");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await page.fill("#search-input", "dessert");
+    await page.getByText("Just yourself. And maybe dessert").waitFor();
+    await personDetail("Sam");
+    await shot(page, "25-offline");
+  });
+
+  await step("offline: AI actions explain themselves instead of failing mysteriously", async () => {
+    await page.click("#nav-settings");
+    await page.check("#mode-custom");
+    await page.getByRole("button", { name: "OpenAI", exact: true }).click();
+    await page.fill("#api-key", "sk-test");
+    await page.click("#nav-inbox");
+    await page.getByRole("button", { name: "All" }).click();
+    await page.locator("[id^=msg-]").filter({ hasText: "Morgan Lee" }).first().click();
+    await page.getByRole("button", { name: "Try again" }).click();
+    await page.getByText(/You're offline, so the AI can't be reached/).waitFor();
+    await ctx.setOffline(false);
+    await page.locator(".chip", { hasText: "Offline" }).waitFor({ state: "detached" });
+    quiet = false;
+  });
+
+  await step("nothing is kept in the browser until the person opts in", async () => {
+    const s = await page.evaluate(async () => ({ ls: localStorage.length, idb: (await indexedDB.databases()).map((d) => d.name) }));
+    if (s.ls || s.idb.length) throw new Error("storage should be empty before opt-in: " + JSON.stringify(s));
+  });
+
+  await step("opt in: an ENCRYPTED copy is kept on this device and follows changes", async () => {
+    await page.click("#nav-settings");
+    await page.locator("#offline-card").scrollIntoViewIfNeeded();
+    await page.check("#device-copy", { force: true });
+    await page.getByRole("heading", { name: "Keep an encrypted copy on this device?" }).waitFor();
+    await shot(page, "26-device-optin");
+    await page.getByRole("button", { name: "Turn it on" }).click();
+    await page.getByText(/Last kept on this device/).waitFor();
+    let info = await idbInfo();
+    if (info.copies.length !== 1) throw new Error("expected one copy");
+    for (const secret of ["Morgan", "Sam", "dessert", "repository", "sk-test"]) if (info.copies[0].text.includes(secret)) throw new Error("plaintext in browser storage: " + secret);
+    await personDetail("Morgan Lee");
+    await page.fill("#support-input", "Short replies are fine");
+    await page.keyboard.press("Enter");
+    await page.getByText("Short replies are fine", { exact: true }).first().waitFor();
+    await page.waitForFunction(() => /Kept on this device|file not saved/.test(document.getElementById("vault-chip").textContent));
+    await shot(page, "27-supports");
+    info = await idbInfo();
+    if (info.copies.length !== 1) throw new Error("still one copy");
+  });
+
+  await step("saving a file also refreshes the device copy; later changes live only on the device", async () => {
+    const [d] = await Promise.all([page.waitForEvent("download"), page.click("#save-btn")]);
+    await d.saveAs(savedPath2);
+    await page.waitForFunction(() => /Revision \d+/.test(document.getElementById("vault-chip").textContent));
+    await page.waitForTimeout(400);
+    await page.fill("#support-input", "Quiet places to meet");
+    await page.keyboard.press("Enter");
+    await page.getByText("Quiet places to meet", { exact: true }).first().waitFor();
+    await page.waitForFunction(() => /Kept on this device/.test(document.getElementById("vault-chip").textContent));
+  });
+
+  await step("closing with unsaved file changes reassures about the device copy", async () => {
+    await page.click("#lock-btn");
+    await page.getByRole("heading", { name: "Save before closing?" }).waitFor();
+    await page.getByText(/kept in the encrypted copy on this device/).waitFor();
+    await page.getByRole("button", { name: "Close without saving" }).click();
+    await page.locator("#device-card").waitFor({ state: "visible" });
+    const dc = await page.locator("#device-card").boundingBox();
+    const nv = await page.getByRole("heading", { name: "Start a new vault" }).boundingBox();
+    if (!(dc.y < nv.y)) throw new Error("the device copy should be offered first, above 'Start a new vault'");
+    await shot(page, "28-welcome-device");
+  });
+
+  await step("welcome: 'Continue on this device' unlocks the newest copy (incl. changes not in any file)", async () => {
+    await page.fill("#device-card input[type=password]", "wrong passphrase here");
+    await page.locator("#device-card").getByRole("button", { name: "Unlock" }).click();
+    await page.locator("#device-card").getByText(/doesn't open this vault/).waitFor();
+    await page.fill("#device-card input[type=password]", PASS);
+    await page.locator("#device-card").getByRole("button", { name: "Unlock" }).click();
+    await page.getByRole("heading", { name: "Inbox" }).waitFor();
+    await personDetail("Morgan Lee");
+    await page.getByText("Short replies are fine", { exact: true }).first().waitFor();
+    await page.getByText("Quiet places to meet", { exact: true }).first().waitFor();
+  });
+
+  await step("opening an older FILE when the device copy is newer asks which to use (and offers both)", async () => {
+    await page.click("#lock-btn");
+    await page.getByRole("button", { name: "Close without saving" }).click();
+    await openSavedFile(savedPath2);
+    await page.getByRole("heading", { name: "This device has newer changes" }).waitFor();
+    await shot(page, "29-newer-on-device");
+    await page.getByRole("button", { name: "Open the file" }).click();
+    await page.getByRole("heading", { name: "Inbox" }).waitFor();
+    await personDetail("Morgan Lee");
+    await page.getByText("Short replies are fine", { exact: true }).first().waitFor();
+    if (await page.getByText("Quiet places to meet", { exact: true }).count()) throw new Error("the file shouldn't have the device-only change");
+    await page.click("#lock-btn");
+    await page.locator("#device-card").waitFor({ state: "visible" });
+    await openSavedFile(savedPath2);
+    await page.getByRole("heading", { name: "This device has newer changes" }).waitFor();
+    await page.getByRole("button", { name: "Use the newer copy on this device" }).click();
+    await page.getByRole("heading", { name: "Inbox" }).waitFor();
+    await personDetail("Morgan Lee");
+    await page.getByText("Quiet places to meet", { exact: true }).first().waitFor();
+  });
+
+  await step("supports: add from suggestions, remove, and shared ones bridge people on the map", async () => {
+    await page.getByRole("button", { name: "+ Needs time to reply" }).click();
+    await page.getByRole("button", { name: "Remove “Quiet places to meet”" }).click();
+    if (await page.getByText("Quiet places to meet", { exact: true }).count()) throw new Error("support should be gone");
+    await personDetail("Sam");
+    await page.getByRole("button", { name: "+ Needs time to reply" }).click();
+    await page.getByText("Needs time to reply", { exact: true }).first().waitFor();
+  });
+
+  await step("map (3D): paints a real graph, rotates on drag, and is keyboard-selectable", async () => {
+    await page.click("#nav-map");
+    await page.locator("#graph-canvas").waitFor();
+    await page.waitForTimeout(300);
+    const painted = await paintedPixels();
+    if (painted < 800) throw new Error("canvas looks empty: " + painted);
+    await shot(page, "30-map-3d");
+    const box = await page.locator("#graph-canvas").boundingBox();
+    const sig = () => page.evaluate(() => { const u = document.getElementById("graph-canvas").toDataURL(); return u.length + ":" + u.slice(-200); });
+    const before = await sig();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 160, box.y + box.height / 2 + 50, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    if (before === (await sig())) throw new Error("dragging should rotate the map");
+    await page.locator("#graph-canvas").focus();
+    await page.keyboard.press("n");
+    await page.locator("#graph-panel h2").filter({ hasNotText: "How to read the map" }).waitFor();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("+");
+    await shot(page, "31-map-selected");
+  });
+
+  await step("map: Flat mode and the accessible List mode show the same things", async () => {
+    await page.getByRole("button", { name: "Flat", exact: true }).click();
+    await page.locator("#graph-canvas").waitFor();
+    await page.waitForTimeout(250);
+    if ((await paintedPixels()) < 800) throw new Error("flat canvas empty");
+    await shot(page, "32-map-flat");
+    await page.getByRole("button", { name: "List", exact: true }).click();
+    await page.locator(".group-label", { hasText: "People" }).waitFor();
+    await page.locator(".list-item", { hasText: "Morgan Lee" }).first().waitFor();
+    const txt = await page.locator(".list-item", { hasText: "Needs time to reply" }).first().textContent();
+    if (!/Morgan Lee/.test(txt) || !/Sam/.test(txt)) throw new Error("shared support should connect both people: " + txt);
+    await shot(page, "33-map-list");
+    await page.locator(".list-item", { hasText: "Morgan Lee" }).first().click();
+    await page.locator("#graph-panel").getByRole("button", { name: "Open person" }).click();
+    await page.getByRole("heading", { name: "Morgan Lee" }).first().waitFor();
+  });
+
+  await step("map: filters hide whole kinds of nodes", async () => {
+    await page.click("#nav-map");
+    await page.getByRole("button", { name: "What helps" }).first().click();
+    if (await page.locator(".group-label", { hasText: "What helps" }).count()) throw new Error("supports should be hidden");
+    await page.getByRole("button", { name: "What helps" }).first().click();
+    await page.locator(".group-label", { hasText: "What helps" }).waitFor();
+  });
+
+  await step("map: tidy topic names with AI sends keywords only and renames topics", async () => {
+    await page.click("#nav-settings");
+    await page.getByRole("button", { name: "Other (OpenAI-compatible)" }).click();
+    await page.fill("#base-url", `http://localhost:${MOCK_PORT}/v1`);
+    await page.fill("#api-key", "test-key");
+    await page.fill("#model-input", "mock-model");
+    await page.click("#nav-map");
+    await page.getByRole("button", { name: "3D", exact: true }).click();
+    await page.click("#map-tidy");
+    await page.getByText("Topic names updated.").waitFor();
+    await page.getByRole("button", { name: "List", exact: true }).click();
+    await page.locator(".list-item", { hasText: "Talk:" }).first().waitFor();
+  });
+
+  await step("turning the device copy off deletes it", async () => {
+    await page.click("#nav-settings");
+    await page.locator("#offline-card").scrollIntoViewIfNeeded();
+    await page.uncheck("#device-copy", { force: true });
+    await page.getByRole("button", { name: "Remove it" }).click();
+    await page.getByText("Removed from this device.").waitFor();
+    const info = await idbInfo();
+    if (info.copies.length) throw new Error("copy should be deleted");
+    await shot(page, "34-settings-offline");
+    await page.click("#lock-btn");
+    await page.getByRole("button", { name: "Close without saving" }).click();
+    await page.getByRole("heading", { name: "Start a new vault" }).waitFor();
+    if (await page.locator("#device-card:not(.hidden)").count()) throw new Error("no device card once removed");
   });
 
   await ctx.close();
@@ -437,6 +707,24 @@ console.log("\nMobile flow");
     await page.keyboard.press("Escape");
   });
 
+  await step("map, supports and the offline card work on a phone", async () => {
+    await page.click("#nav-map");
+    await page.locator("#graph-canvas").waitFor();
+    await page.waitForTimeout(300);
+    await shot(page, "m08-map");
+    await noOverflow(page, "mobile map");
+    const box = await page.locator("#graph-canvas").boundingBox();
+    if (box.width < 300) throw new Error("canvas too narrow: " + box.width);
+    await page.getByRole("button", { name: "List", exact: true }).click();
+    await shot(page, "m09-map-list");
+    await noOverflow(page, "mobile map list");
+    await page.click("#nav-settings");
+    await page.locator("#offline-card").scrollIntoViewIfNeeded();
+    await shot(page, "m10-offline-card");
+    await noOverflow(page, "mobile settings");
+    if (await page.locator(".topbar #install-btn").count() && (await page.locator(".topbar #install-btn").isVisible())) throw new Error("top-bar install button should be hidden on phones");
+  });
+
   await step("add-message dialog fits on a phone", async () => {
     await page.click("#nav-inbox");
     await page.click("#add-message-btn");
@@ -463,7 +751,7 @@ console.log("\nMobile tour");
     await page.check("#nv-ack");
     await page.click("button:has-text('Create my vault')");
     await page.locator("#tour-card").waitFor();
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 10; i++) {
       const title = await page.locator("#tour-title").textContent();
       if (title === "Add a message") await page.getByRole("button", { name: "Load the example" }).click();
       await page.waitForTimeout(150);

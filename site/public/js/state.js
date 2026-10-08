@@ -7,7 +7,8 @@
  */
 
 import { seal, vaultFileName, newSession, createEmptyVault } from "./vault.js";
-import { downloadBlob } from "./utils.js";
+import { downloadBlob, uid } from "./utils.js";
+import { deviceStorageAvailable, putCopy, deleteCopy } from "./device.js";
 
 export const app = {
   vault: null,
@@ -22,6 +23,9 @@ export const app = {
   peopleQuery: "",
   askMode: "ask", // ask | search
   askDraft: "",
+  searchDraft: "", // set by the map ("see messages about …") to prefill Search
+  pwa: { canPrompt: false, installed: false, offlineReady: false, online: typeof navigator === "undefined" ? true : navigator.onLine !== false, ios: false },
+  device: { status: "idle", savedAt: null, error: null }, // status: idle | pending | saving | ok | error
   askThread: [], // session-only Q&A; never saved
   trial: { checked: false, available: false },
   busy: new Set(), // message ids / "summary:<id>" currently calling the AI
@@ -45,6 +49,11 @@ export function emit() {
 export function touch() {
   if (!app.vault) return;
   app.dirty = true;
+  scheduleDeviceSave();
+  for (const fn of lightSubs) fn();
+}
+
+export function paintLight() {
   for (const fn of lightSubs) fn();
 }
 
@@ -53,6 +62,7 @@ export function mutate(fn, { render = true } = {}) {
   if (!app.vault) return;
   fn(app.vault);
   app.dirty = true;
+  scheduleDeviceSave();
   if (render) emit();
   else for (const f of lightSubs) f();
 }
@@ -73,10 +83,11 @@ export function applyAppearance() {
 }
 
 // ── opening / closing ──
-export function startVault(vault, session, fileName = null) {
+export function startVault(vault, session, fileName = null, { dirty = false } = {}) {
   app.vault = vault;
   app.session = session;
-  app.dirty = false;
+  app.dirty = dirty;
+  app.device = { status: "idle", savedAt: null, error: null };
   app.fileName = fileName;
   app.savedAt = vault.updatedAt ? new Date(vault.updatedAt).getTime() : null;
   app.view = "inbox";
@@ -101,6 +112,8 @@ export async function createVault({ name, passphrase }) {
 }
 
 export function closeVault() {
+  clearTimeout(deviceTimer);
+  app.device = { status: "idle", savedAt: null, error: null };
   app.vault = null;
   app.session = null;
   app.dirty = false;
@@ -132,6 +145,7 @@ export async function saveVault() {
     app.savedAt = Date.now();
     app.fileName = name;
     emit();
+    if (deviceEnabled()) saveDeviceCopy(); // keep the on-device copy in step with the file
     return name;
   } catch (e) {
     v.revision = prevRev;
@@ -157,4 +171,68 @@ export function isTodo(m) {
 
 export function todoCount() {
   return app.vault ? app.vault.messages.filter(isTodo).length : 0;
+}
+
+// ── opt-in encrypted copy on this device ──
+let deviceTimer = null;
+
+export const deviceEnabled = () => Boolean(app.vault?.settings.deviceCopy && app.vault.deviceSlot && app.session && deviceStorageAvailable());
+
+/** Debounced: most edits arrive in bursts. */
+export function scheduleDeviceSave(delay = 1200) {
+  if (!deviceEnabled()) return;
+  clearTimeout(deviceTimer);
+  app.device.status = "pending";
+  deviceTimer = setTimeout(() => { saveDeviceCopy(); }, delay);
+}
+
+export async function saveDeviceCopy() {
+  if (!deviceEnabled()) return false;
+  clearTimeout(deviceTimer);
+  const v = app.vault;
+  app.device = { ...app.device, status: "saving", error: null };
+  paintLight();
+  try {
+    const copy = structuredClone(v);
+    if (!copy.provider.remember) copy.provider.apiKey = ""; // same rule as the file: keys aren't kept unless asked
+    const text = await seal(copy, app.session);
+    if (app.vault !== v) return false; // vault was closed/replaced while sealing
+    await putCopy({ slot: v.deviceSlot, revision: v.revision, savedAt: new Date().toISOString(), text });
+    app.device = { status: "ok", savedAt: Date.now(), error: null };
+    paintLight();
+    return true;
+  } catch (e) {
+    app.device = { status: "error", savedAt: app.device.savedAt, error: e?.message || "Couldn't save on this device." };
+    paintLight();
+    return false;
+  }
+}
+
+/** Finish any pending write before the vault is closed. */
+export async function flushDeviceSave() {
+  if (deviceEnabled() && (app.device.status === "pending" || app.dirty)) await saveDeviceCopy();
+}
+
+export async function enableDeviceCopy() {
+  if (!deviceStorageAvailable()) throw new Error("This browser can't keep a copy on this device.");
+  mutate((v) => {
+    v.settings.deviceCopy = true;
+    if (!v.deviceSlot) v.deviceSlot = uid();
+  }, { render: false });
+  try { await navigator.storage?.persist?.(); } catch { /* best effort: asks the browser not to evict it */ }
+  const ok = await saveDeviceCopy();
+  if (!ok) {
+    mutate((v) => { v.settings.deviceCopy = false; }, { render: false });
+    throw new Error(app.device.error || "Couldn't save a copy on this device.");
+  }
+  emit();
+}
+
+export async function disableDeviceCopy() {
+  clearTimeout(deviceTimer);
+  const slot = app.vault?.deviceSlot;
+  if (slot) { try { await deleteCopy(slot); } catch { /* nothing to delete */ } }
+  mutate((v) => { v.settings.deviceCopy = false; }, { render: false });
+  app.device = { status: "idle", savedAt: null, error: null };
+  emit();
 }

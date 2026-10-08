@@ -47,6 +47,7 @@ export const TOOLS = {
         messages: ms.length, first: ms[0] ? new Date(ms[0].ts).toISOString().slice(0, 10) : null,
         last: ms.length ? new Date(ms[ms.length - 1].ts).toISOString().slice(0, 10) : null,
         saved_summary: vault.summaries[p.id]?.story ?? null,
+        what_helps_the_user: (p.supports ?? []).map((s) => s.text),
       };
     },
   },

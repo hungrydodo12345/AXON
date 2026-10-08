@@ -40,6 +40,8 @@ export const GUIDE = [
         ["Nobody can recover a lost passphrase. ", "Choose something you'll remember: a few random words together works well (for example “maple orbit quiet bicycle”)."],
         "Store your vault somewhere safe: your cloud drive, a USB stick, or your computer. Keep an older copy as a backup.",
       ] },
+      { h: "Keeping a copy on this device (optional)" },
+      { p: "In Settings → Offline and this device you can switch on an encrypted copy that AXON keeps in this browser and updates as you work. Then “Continue on this device” appears on the start page and works even with no internet. It's off by default, it's locked with your passphrase, and you can delete it any time. Browsers can clear stored data, so keep saving vault files too. Don't turn it on for a shared or public computer." },
       { h: "Using a different device" },
       { p: "Copy the .axon file to the other device (email it to yourself, use a cloud drive or a USB stick) and open it there. Just remember that two devices don't merge — whichever you save last has the newest revision, so carry one file forward at a time." },
     ],
@@ -82,6 +84,8 @@ export const GUIDE = [
     title: "People",
     blocks: [
       { p: "Everyone you add a message from appears under People, grouped as Work or Personal. Add how you know them (sister, manager, college friend) and notes, and AXON uses that to read their messages better." },
+      { h: "What helps with them" },
+      { p: "On each person you can record what helps you with them: “needs time to reply”, “prefers text to calls”, “give me a heads-up before calls”, or anything in your own words. AXON shapes its reply ideas around these (for example a kind reply that buys time), and they appear on your map. It's your own record of your accommodations, stored only in your vault." },
       { p: "Open someone and choose “Write the story so far” to get a short, kind summary of your history with them, what's still open, and small details worth remembering. It's saved in your vault." },
     ],
   },
@@ -92,6 +96,34 @@ export const GUIDE = [
       { p: "Ask understands questions like “What did Morgan say about the repository?”, “Who am I waiting to reply to?” or “What's the story with Sam?”. It looks things up in your vault step by step and shows how it found the answer. If it can't find it, it says so rather than guessing." },
       { p: "Search is plain keyword search that runs only on your device and needs no AI at all." },
       { p: "Your questions and answers aren't saved in the vault. They disappear when you close the page." },
+    ],
+  },
+  {
+    id: "map",
+    title: "The map",
+    blocks: [
+      { p: "The Map shows how everything in your vault connects, a bit like a graph of notes: people, the topics you keep coming back to, things waiting on you, and what helps with each person. It's built on your device from your own messages." },
+      { ul: [
+        ["Shapes, not just colours. ", "Circles are people (work and personal in different colours), diamonds are topics, rounded squares are things waiting on you, and hexagons are what helps."],
+        ["3D, Flat or List. ", "Drag to rotate, scroll or pinch to zoom, and tap a shape to see what it connects to. Flat is a calmer 2D view. List is a plain text version that works well with screen readers."],
+        ["Keyboard. ", "Focus the map, then use the arrow keys to rotate, + and − to zoom, N and P to move between items, and Enter to open one."],
+        ["Calm by default. ", "Nothing spins unless you turn on “Gentle spin”, and it stays still if your device asks for reduced motion."],
+      ] },
+      { p: "Topics come from words that recur in your messages. Select one and choose Rename to give it your own name, or use “Tidy topic names with AI”, which sends only the keywords (never your messages)." },
+    ],
+  },
+  {
+    id: "offline",
+    title: "Install and offline",
+    blocks: [
+      { p: "AXON can be installed like an app and works without internet." },
+      { ul: [
+        ["Install. ", "Use the Install app button (top bar, start page, or Settings). On iPhone and iPad choose Share → Add to Home Screen."],
+        ["Offline. ", "Once AXON has loaded once, it opens without a connection. Choose your vault file (or your on-device copy) and read your messages, search, and explore your people and map."],
+        ["What needs a connection. ", "Making sense of a message, tidying topic names and asking questions use an AI, so they pause when you're offline. A model running on your own computer (Ollama, LM Studio) still works."],
+        ["Updates. ", "AXON refreshes itself quietly when you're online and tells you when a new version is ready."],
+      ] },
+      { note: "Installing only adds the app. Your messages still live in your vault file (and your on-device copy, if you choose one), never on a server." },
     ],
   },
   {
@@ -116,7 +148,7 @@ export const GUIDE = [
     title: "Privacy and security",
     blocks: [
       { ul: [
-        ["No account, no database, no cookies, no trackers. ", "This site stores nothing about you, and loads nothing from third parties."],
+        ["No account, no database, no cookies, no trackers. ", "This site stores nothing about you, and loads nothing from third parties. The only thing kept in your browser is the app's own code (so it works offline), plus an encrypted copy of your vault if you choose to switch that on."],
         ["Encrypted on your device. ", "AES-256-GCM, with a key derived from your passphrase (PBKDF2, 600,000 rounds). The saved file also detects tampering."],
         ["The AI only sees what you send it. ", "Just the message you ask about, a little context about that person, and the last few messages with them. Never your whole vault. Imported chats stay put until you ask about one."],
         ["Your provider's rules apply. ", "If you use your own provider, their privacy policy covers what they do with the text you send them. Local models (Ollama, LM Studio) send nothing out."],

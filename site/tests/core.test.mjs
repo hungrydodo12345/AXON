@@ -47,7 +47,7 @@ test("vault: encrypt → decrypt round trip keeps everything", async () => {
   assert.ok(!("revision" in file), "revision lives inside the ciphertext");
   const { vault, session: s2 } = await openVault(text, "correct horse battery staple");
   assert.equal(vault.revision, 7);
-  assert.deepEqual(vault.people, v.people);
+  assert.deepEqual(vault.people, normalizeVault(v).people, "people survive the round trip (supports default to [])");
   assert.deepEqual(vault.messages, v.messages);
   // re-sealing with the reopened session works
   const again = await seal(vault, s2);
@@ -261,4 +261,84 @@ test("agent: survives garbage and unknown tools without crashing", async () => {
     assert.equal(out.answer, "I don't see that.");
     assert.match(f.calls[2].body.messages.at(-1).content, /Unknown tool/);
   } finally { f.restore(); }
+});
+
+// ═════════ map / graph ═════════
+import { buildGraph, neighbours, normalizeSupport } from "../public/js/graph-data.js";
+import { createLayout, project, makeView, fitView, nodeRadius, hash32 } from "../public/js/graph-layout.js";
+
+function mapVault() {
+  const v = sampleVault();
+  const add = (id, personId, text, extra = {}) => v.messages.push({ id, personId, text, ts: "2026-03-07T10:00:00Z", direction: "in", status: "new", needsReply: false, ...extra });
+  add("m5", "p1", "The repository deploy failed again, review the repository logs please.");
+  add("m6", "p2", "Dinner at mum's again? The lasagna was great last time.");
+  v.people[0].supports = [{ id: "s1", text: "Needs time to reply" }, { id: "s2", text: "Prefers text over calls" }];
+  v.people[1].supports = [{ id: "s3", text: "needs  time to reply " }];
+  v.messages[0].analysis = { asks: ["Review the repository changes"], reply_by: "today", dates: ["Friday"] };
+  return v;
+}
+
+test("graph: people, topics, commitments and supports are built and linked", () => {
+  const g = buildGraph(mapVault());
+  const types = (t) => g.nodes.filter((n) => n.type === t);
+  assert.equal(types("person").length, 2);
+  assert.ok(types("topic").some((t) => t.label === "Repository"), "recurring word becomes a topic");
+  assert.ok(types("topic").some((t) => t.label === "Lasagna" || t.label === "Dinner"));
+  assert.ok(!types("topic").some((t) => /morgan|sam/i.test(t.label)), "person names are not topics");
+  const c = types("commitment");
+  assert.equal(c.length, 2, "m1 and m3 are open loops");
+  assert.ok(c.some((n) => n.label === "Review the repository changes" && n.meta.due === "Reply today"));
+  // shared support text (different case/spacing) merges into ONE node linking both people
+  const shared = types("support").filter((n) => n.id === `s:${normalizeSupport("Needs time to reply")}`);
+  assert.equal(shared.length, 1);
+  assert.equal(neighbours(g, shared[0].id).length, 2);
+  for (const l of g.links) assert.ok(g.nodes.some((n) => n.id === l.source) && g.nodes.some((n) => n.id === l.target), "no dangling links");
+});
+
+test("graph: filters hide node types without leaving orphans", () => {
+  const v = mapVault();
+  const g = buildGraph(v, { topics: false, commitments: false, supports: false });
+  assert.deepEqual([...new Set(g.nodes.map((n) => n.type))], ["person"]);
+  const noPeople = buildGraph(v, { people: false });
+  assert.equal(noPeople.nodes.length, 0, "everything hangs off people, so hiding them leaves nothing orphaned");
+});
+
+test("graph: topics prefer words shared by several people; custom labels win; caps hold", () => {
+  const v = createEmptyVault();
+  for (let i = 0; i < 80; i++) v.people.push({ id: `p${i}`, name: `Person${i}`, category: i % 2 ? "work" : "personal", relationship: "", notes: "", supports: [] });
+  for (let i = 0; i < 400; i++) v.messages.push({ id: `m${i}`, personId: `p${i % 80}`, text: `budget meeting ${["alpha", "bravo", "charlie", "delta"][i % 4]} planning project${i % 30}`, ts: "2026-01-01T00:00:00Z", direction: "in", status: "new", needsReply: null });
+  v.graph.labels = { budget: "Money talk" };
+  const g = buildGraph(v);
+  assert.ok(g.nodes.filter((n) => n.type === "person").length <= 60);
+  assert.ok(g.nodes.filter((n) => n.type === "topic").length <= 14);
+  assert.ok(g.nodes.some((n) => n.label === "Money talk"));
+});
+
+test("layout: deterministic, finite and bounded; warm start keeps positions", () => {
+  const g = buildGraph(mapVault());
+  const a = createLayout(g); a.settle(300);
+  const b = createLayout(g); b.settle(300);
+  assert.deepEqual(a.snapshot(), b.snapshot(), "same vault → same layout");
+  for (const p of a.positions) { assert.ok([p.x, p.y, p.z].every(Number.isFinite)); assert.ok(Math.hypot(p.x, p.y, p.z) < 700); }
+  const warm = createLayout(g, a.snapshot());
+  assert.deepEqual(warm.snapshot(), a.snapshot());
+  assert.notEqual(hash32("a"), hash32("b"));
+});
+
+test("camera: projection is stable, perspective shrinks far nodes, flat mode ignores depth", () => {
+  const v = makeView();
+  const near = project({ x: 0, y: 0, z: -200 }, { ...v, yaw: 0, pitch: 0 }, 800, 600);
+  const far = project({ x: 100, y: 0, z: 300 }, { ...v, yaw: 0, pitch: 0 }, 800, 600);
+  assert.ok(near.scale > far.scale && near.depth < far.depth);
+  const flat = project({ x: 50, y: -20, z: 999 }, { ...v, mode: "flat", zoom: 2 }, 800, 600);
+  assert.deepEqual([flat.x, flat.y], [500, 260]);
+  // fitting fills the canvas and centres an off-centre graph
+  const pts = [{ x: 100, y: 100, z: 0 }, { x: 400, y: 160, z: 0 }, { x: 250, y: 130, z: 40 }];
+  const fit = fitView(pts, { ...v, mode: "flat" }, 800, 600);
+  assert.ok(fit.zoom > 0.35 && fit.zoom <= 3.2);
+  const a = project(pts[0], { ...v, mode: "flat", ...fit }, 800, 600), b = project(pts[1], { ...v, mode: "flat", ...fit }, 800, 600);
+  assert.ok(Math.abs((a.x + b.x) / 2 - 400) < 1 && Math.abs((a.y + b.y) / 2 - 300) < 40, "graph is centred");
+  assert.ok(Math.max(a.x, b.x) - Math.min(a.x, b.x) > 400, "small graphs are scaled up to fill the space");
+  assert.deepEqual(fitView([], v, 800, 600), { zoom: 1, panX: 0, panY: 0 });
+  assert.ok(nodeRadius({ type: "person", weight: 50 }) > nodeRadius({ type: "person", weight: 1 }));
 });

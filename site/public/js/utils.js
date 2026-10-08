@@ -82,6 +82,13 @@ export function fmtFull(ts) {
   return isNaN(d) ? "" : fullFmt.format(d);
 }
 
+const preciseFmt = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
+/** Like fmtFull but with seconds — for choices where two times can fall in the same minute. */
+export function fmtPrecise(ts) {
+  const d = new Date(ts);
+  return isNaN(d) ? "" : preciseFmt.format(d);
+}
+
 export function fmtAgo(ts, now = Date.now()) {
   const d = new Date(ts).getTime();
   if (isNaN(d)) return "";

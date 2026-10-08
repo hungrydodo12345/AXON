@@ -9,6 +9,17 @@ const STOP = new Set(
   "a an and are as at be but by for from had has have he her his i if in is it its me my of on or our she so that the their them they this to us was we were what when where which who will with you your about did do does not no yes".split(" ")
 );
 
+/** Like tokenize(), but keeps the original word for each stem so topics can be shown readably. */
+export function tokenizeWithForms(text) {
+  const words = String(text ?? "").toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "").match(/[\p{L}\p{N}]+/gu) ?? [];
+  const out = [];
+  for (const w of words) {
+    const s = stem(w);
+    if (s.length > 1 && !STOP.has(s)) out.push({ stem: s, word: w });
+  }
+  return out;
+}
+
 export function tokenize(text) {
   return String(text ?? "")
     .toLowerCase()

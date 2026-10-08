@@ -93,7 +93,10 @@ export function createEmptyVault(name = "") {
       needs: { literal: false, explainTone: true, labelEmotions: false, short: false, gentle: true },
       theme: "auto",
       textSize: "m",
+      deviceCopy: false, // opt-in: keep an encrypted copy in this browser
     },
+    deviceSlot: "", // id of that copy (set when the user opts in)
+    graph: { labels: {} }, // friendlier topic names chosen by the user / AI
     provider: {
       mode: "none", // "none" | "trial" | "custom"
       preset: "groq",
@@ -120,7 +123,11 @@ export function normalizeVault(raw) {
   v.settings.needs = { ...base.settings.needs, ...(raw.settings?.needs || {}) };
   v.provider = { ...base.provider, ...(raw.provider || {}) };
   v.tour = { ...base.tour, ...(raw.tour || {}) };
-  v.people = Array.isArray(raw.people) ? raw.people.filter((p) => p && p.id && p.name) : [];
+  v.deviceSlot = typeof raw.deviceSlot === "string" ? raw.deviceSlot : "";
+  v.graph = { labels: raw.graph && typeof raw.graph.labels === "object" && raw.graph.labels ? raw.graph.labels : {} };
+  v.people = Array.isArray(raw.people)
+    ? raw.people.filter((p) => p && p.id && p.name).map((p) => ({ ...p, supports: Array.isArray(p.supports) ? p.supports.filter((s) => s && typeof s.text === "string" && s.text.trim()) : [] }))
+    : [];
   v.messages = Array.isArray(raw.messages) ? raw.messages.filter((m) => m && m.id && typeof m.text === "string") : [];
   v.summaries = raw.summaries && typeof raw.summaries === "object" ? raw.summaries : {};
   v.revision = Number.isFinite(raw.revision) ? raw.revision : 0;

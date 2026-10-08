@@ -48,6 +48,7 @@ export function buildSystemPrompt(vault) {
     n.labelEmotions ? "- In tone, name the likely feeling in plain words (e.g. 'seems a bit stressed')." : "",
     n.short ? "- Be brief: summary under 20 words, replies under 25 words each." : "- Summary is one or two short sentences; replies are 1–3 short sentences.",
     n.gentle ? "- Use gentle, neutral wording. Never imply the user did something wrong." : "",
+    "- If CONTEXT lists what helps the user with this person (e.g. 'needs time to reply', 'prefers text to calls'), shape the replies to fit it (for example a kind reply that buys time, or one that suggests texting instead of a call). Don't announce or explain the list.",
     "- Replies are written as the USER, in first person, ready to send. Do not promise things the user hasn't chosen; where a decision is needed, write the reply so it works either way or use a placeholder like [yes/no].",
     "",
     "Return ONLY a single JSON object, no markdown, no commentary, with exactly these keys:",
@@ -74,6 +75,7 @@ export function buildUserPrompt(vault, message, person) {
     if (person.relationship) ctx.push(`Relationship to user: ${clip(person.relationship, 120)}`);
     if (person.category) ctx.push(`Context: ${person.category}`);
     if (person.notes) ctx.push(`Notes the user wrote about them: ${clip(person.notes, 400)}`);
+    if (person.supports?.length) ctx.push(`What helps the user with this person (honour these in the suggested replies): ${person.supports.slice(0, 8).map((s) => clip(s.text, 80)).join("; ")}`);
     const recent = messagesFor(vault, person.id)
       .filter((m) => m.id !== message.id && new Date(m.ts) <= new Date(message.ts))
       .slice(-6);
@@ -193,4 +195,24 @@ export async function summarizePerson(vault, person, { signal } = {}) {
     at: new Date().toISOString(),
     basedOn: msgs.length,
   };
+}
+
+/** Optional: ask the AI for friendlier topic names. Sends ONLY keywords, never message text. */
+export async function labelTopics(vault, topics, { signal } = {}) {
+  const system = [
+    "You give short, friendly names to conversation topics, from keywords only.",
+    "Each topic has a main word and a few words that often appear with it. Name it in 1 to 3 plain words (e.g. 'Dinner plans', 'Code review').",
+    "Use only the words given. Do not invent specifics. Keep the main word if it's already a good name.",
+    'Return ONLY JSON: {"labels": {"<id>": "<name>", ...}} with exactly the ids you were given.',
+  ].join("\n");
+  const user = JSON.stringify(topics.map((t) => ({ id: t.stem, word: t.meta.word, often_with: t.meta.related })));
+  const text = await callModel(vault.provider, { system, messages: [{ role: "user", content: user }], maxTokens: 500, signal });
+  const raw = extractJson(text);
+  const ids = new Set(topics.map((t) => t.stem));
+  const out = {};
+  for (const [id, name] of Object.entries(raw?.labels ?? {})) {
+    if (ids.has(id) && typeof name === "string" && name.trim()) out[id] = clip(name.trim(), 30);
+  }
+  if (!Object.keys(out).length) throw new Error("The AI didn't suggest any names. Try again.");
+  return out;
 }

@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "AXON — messages, made manageable",
+  "short_name": "AXON",
+  "description": "A private, vault-based companion that explains the tone of messages and suggests calm replies. Works offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "lang": "en",
+  "background_color": "#f6f5f2",
+  "theme_color": "#3556c8",
+  "categories": ["productivity", "lifestyle", "health"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

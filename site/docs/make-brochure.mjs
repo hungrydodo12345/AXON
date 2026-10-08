@@ -49,6 +49,17 @@ async function openWithExample(viewport, { mobile = false } = {}) {
   await page.screenshot({ path: path.join(img, "analysis-desktop.png"), clip: { x: 0, y: 0, width: 1280, height: 960 } });
   await ctx.close();
 }
+// desktop map: the example, connected
+{
+  const { ctx, page } = await openWithExample({ width: 1280, height: 740 });
+  await page.click("#nav-map");
+  await page.locator("#graph-canvas").waitFor();
+  await page.waitForTimeout(500);
+  await page.evaluate(() => { const t = document.getElementById("toasts"); t.hidden = true; t.replaceChildren(); document.activeElement?.blur(); });
+  await page.waitForTimeout(300);
+  await page.locator("#view-map .map-split").screenshot({ path: path.join(img, "map-desktop.png") });
+  await ctx.close();
+}
 // mobile: the analysed message
 {
   const { ctx, page } = await openWithExample({ width: 390, height: 844 }, { mobile: true });

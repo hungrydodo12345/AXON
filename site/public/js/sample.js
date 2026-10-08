@@ -11,7 +11,11 @@ export const SAMPLE_PERSON_NAME = "Sam (sample)";
 export function addSample(vault) {
   let person = vault.people.find((p) => p.sample);
   if (!person) {
-    person = { id: uid(), name: SAMPLE_PERSON_NAME, category: "personal", relationship: "Friend", notes: "This is example data from the tour. You can delete it any time.", createdAt: new Date().toISOString(), sample: true };
+    person = {
+      id: uid(), name: SAMPLE_PERSON_NAME, category: "personal", relationship: "Friend",
+      notes: "This is example data from the tour. You can delete it any time.", createdAt: new Date().toISOString(), sample: true,
+      supports: [{ id: uid(), text: "Needs a day or two to reply" }, { id: uid(), text: "Prefers text to calls" }],
+    };
     vault.people.push(person);
   }
   let msg = vault.messages.find((m) => m.sample && m.personId === person.id);
@@ -47,6 +51,12 @@ export function addSample(vault) {
       },
     };
     vault.messages.push(msg);
+    // a little history so the map has something to connect
+    const day = 24 * 60 * 60 * 1000;
+    vault.messages.push(
+      { id: uid(), personId: person.id, direction: "in", source: "paste", ts: new Date(Date.now() - 3 * day).toISOString(), text: "Dinner at Priya's last time was lovely. Thanks again for the lift home!", status: "new", needsReply: false, sample: true },
+      { id: uid(), personId: person.id, direction: "out", source: "paste", ts: new Date(Date.now() - 3 * day + 3600000).toISOString(), text: "Glad you got home safe! Priya's cooking is always worth the trip.", status: "new", needsReply: false, sample: true }
+    );
   }
   return { person, message: msg };
 }

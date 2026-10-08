@@ -4,6 +4,8 @@ import { messagesFor } from "../search.js";
 import { isConfigured } from "../providers.js";
 import { runSummary, cancelBusy } from "../actions.js";
 import { icon, chip, avatar, emptyState, spinner, confirmDialog, toast } from "./common.js";
+import { uid } from "../utils.js";
+import { normalizeSupport } from "../graph-data.js";
 import { openPersonDialog } from "./dialogs.js";
 import { addMessageFlow, openMessage } from "./inbox.js";
 
@@ -92,6 +94,8 @@ function personDetail(p) {
       h("div", { class: "stack tight" }, loops.slice(-3).map((m) => h("button", { type: "button", class: "hit", onclick: () => openMessage(m.id) }, h("span", { class: "muted tiny", text: fmtWhen(m.ts) }), h("div", { text: clip(m.text.replace(/\s+/g, " "), 140) }))))));
   }
 
+  wrap.append(supportsCard(p));
+
   // story so far
   const story = h("section", { class: "card", "aria-label": "The story so far" },
     h("div", { class: "card-title" }, icon("sparkle"), "The story so far"));
@@ -150,4 +154,44 @@ async function deletePerson(p, count) {
   if (app.selectedMessageId && !app.vault.messages.some((m) => m.id === app.selectedMessageId)) app.selectedMessageId = null;
   emit();
   toast(`${p.name} was removed.`);
+}
+
+const SUPPORT_SUGGESTIONS = [
+  "Needs time to reply",
+  "Prefers text to calls",
+  "Give me a heads-up before calls",
+  "Short replies are fine",
+  "Things in writing, please",
+  "Plan ahead, not last minute",
+  "Check in gently if I go quiet",
+  "Quiet places to meet",
+];
+
+function addSupport(personId, text) {
+  const clean = String(text).trim().slice(0, 80);
+  if (!clean) return;
+  mutate((v) => {
+    const p = v.people.find((x) => x.id === personId);
+    if (!p) return;
+    p.supports = p.supports ?? [];
+    if (!p.supports.some((s) => normalizeSupport(s.text) === normalizeSupport(clean))) p.supports.push({ id: uid(), text: clean });
+  });
+}
+
+function supportsCard(p) {
+  const first = p.name.split(/\s+/)[0];
+  const have = p.supports ?? [];
+  const input = h("input", { class: "input", id: "support-input", type: "text", maxlength: "80", autocomplete: "off", placeholder: "Something that helps, in your own words…", "aria-label": `Add something that helps with ${first}`,
+    onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); addSupport(p.id, input.value); } } });
+  const suggestions = SUPPORT_SUGGESTIONS.filter((t) => !have.some((s) => normalizeSupport(s.text) === normalizeSupport(t)));
+  return h("section", { class: "card stack tight", id: "supports-card", "aria-labelledby": "supports-h" },
+    h("div", { class: "card-title", id: "supports-h" }, icon("shield"), `What helps with ${first}`),
+    h("p", { class: "muted small", text: "Your own accommodations for this relationship. AXON shapes reply ideas around them, and they show up on your map." }),
+    have.length
+      ? h("ul", { class: "chips support-list", "aria-label": "What helps" }, have.map((s) => h("li", { class: "support-item" },
+          h("span", { text: s.text }),
+          h("button", { type: "button", class: "support-remove", "aria-label": `Remove “${s.text}”`, onclick: () => mutate((v) => { const x = v.people.find((q) => q.id === p.id); if (x) x.supports = x.supports.filter((q) => q.id !== s.id); }) }, icon("x")))))
+      : h("p", { class: "hint", text: "Nothing added yet." }),
+    h("div", { class: "row" }, h("div", { class: "grow" }, input), h("button", { type: "button", class: "btn", id: "support-add", onclick: () => addSupport(p.id, input.value) }, icon("plus"), "Add")),
+    suggestions.length ? h("div", { class: "chips", role: "group", "aria-label": "Suggestions" }, suggestions.slice(0, 5).map((t) => h("button", { type: "button", class: "chip-btn", onclick: () => addSupport(p.id, t) }, `+ ${t}`))) : null);
 }

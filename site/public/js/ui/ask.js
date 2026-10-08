@@ -108,14 +108,13 @@ function turnCard(t) {
   return card;
 }
 
-let searchQuery = "";
 function renderSearch(root) {
-  const input = h("input", { class: "input", id: "search-input", type: "search", placeholder: "Search every message, person and note…", "aria-label": "Search your vault", autocomplete: "off", value: searchQuery,
-    oninput: (e) => { searchQuery = e.target.value; paintResults(); } });
+  const input = h("input", { class: "input", id: "search-input", type: "search", placeholder: "Search every message, person and note…", "aria-label": "Search your vault", autocomplete: "off", value: app.searchDraft,
+    oninput: (e) => { app.searchDraft = e.target.value; paintResults(); } });
   const results = h("div", { class: "stack tight", "aria-live": "polite" });
   function paintResults() {
     results.replaceChildren();
-    const q = searchQuery.trim();
+    const q = app.searchDraft.trim();
     if (!q) { results.append(h("p", { class: "muted", text: "Type a few words. Search runs only on your device, needs no AI, and ranks the best matches first." })); return; }
     const hits = searchMessages(app.vault, q, { limit: 30 });
     if (!hits.length) { results.append(h("p", { class: "muted", text: "No messages matched. Try fewer or different words." })); return; }

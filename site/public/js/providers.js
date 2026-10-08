@@ -192,10 +192,15 @@ async function callTrial({ system, messages, maxTokens, signal }) {
   return body.text;
 }
 
+const isLocalProvider = (p) => p.mode === "custom" && (Boolean(presetById(p.preset).local) || /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(p.baseUrl || ""));
+
 export async function callModel(provider, req) {
   const r = { maxTokens: 1200, messages: [], ...req };
   if (!isConfigured(provider)) {
     throw new ProviderError("not_configured", "No AI is connected yet. Open Settings → AI and choose the free trial or your own provider.");
+  }
+  if (typeof navigator !== "undefined" && navigator.onLine === false && !isLocalProvider(provider)) {
+    throw new ProviderError("network", "You're offline, so the AI can't be reached. Reading, searching, your people and the map all still work. Try again when you're back online.");
   }
   if (provider.mode === "trial") return callTrial(r);
   if (provider.kind === "anthropic") return callAnthropic(provider, r);
@@ -205,6 +210,7 @@ export async function callModel(provider, req) {
 
 /** Is the free-trial proxy available on this host? */
 export async function checkTrial() {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return false; // no pointless failing request
   try {
     const res = await fetch(TRIAL_ENDPOINT, { method: "GET", headers: { Accept: "application/json" } });
     if (!res.ok) return false;

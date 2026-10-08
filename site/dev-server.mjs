@@ -23,20 +23,33 @@ const TYPES = {
   ".ico": "image/x-icon", ".pdf": "application/pdf", ".webmanifest": "application/manifest+json", ".txt": "text/plain; charset=utf-8",
 };
 
+/** Parse Netlify-style _headers: path patterns on their own line, indented "Name: value" lines below. */
 async function loadHeaders() {
   try {
     const text = await readFile(path.join(root, "_headers"), "utf8");
-    const headers = {};
+    const rules = [];
+    let current = null;
     for (const line of text.split("\n")) {
+      if (/^\S/.test(line)) { current = { pattern: line.trim(), headers: {} }; rules.push(current); continue; }
       const m = line.match(/^\s+([A-Za-z-]+):\s*(.+)$/);
-      if (m) headers[m[1]] = m[2].trim();
+      if (m && current) current.headers[m[1]] = m[2].trim();
     }
-    return headers;
+    return rules;
   } catch {
-    return {};
+    return [];
   }
 }
-const secHeaders = await loadHeaders();
+const headerRules = await loadHeaders();
+
+/** Headers that apply to a URL path: later, more specific rules override earlier ones (like Netlify). */
+function headersFor(pathname) {
+  const out = {};
+  for (const { pattern, headers } of headerRules) {
+    const hit = pattern === "/*" || (pattern.endsWith("/*") ? pathname.startsWith(pattern.slice(0, -1)) : pathname === pattern);
+    if (hit) Object.assign(out, headers);
+  }
+  return out;
+}
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -60,7 +73,7 @@ const server = http.createServer(async (req, res) => {
       if (!path.extname(full)) full = path.join(root, "index.html");
     }
     const data = await readFile(full);
-    res.writeHead(200, { "Content-Type": TYPES[path.extname(full)] ?? "application/octet-stream", "Cache-Control": "no-cache", ...secHeaders });
+    res.writeHead(200, { "Content-Type": TYPES[path.extname(full)] ?? "application/octet-stream", "Cache-Control": "no-cache", ...headersFor(url.pathname) });
     res.end(data);
   } catch {
     res.writeHead(404, { "Content-Type": "text/plain" });

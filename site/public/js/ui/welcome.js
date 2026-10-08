@@ -1,7 +1,9 @@
-import { h, readFileText, fmtFull } from "../utils.js";
+import { h, readFileText, fmtFull, fmtAgo, fmtPrecise } from "../utils.js";
 import { peekVault, openVault, passphraseStrength, VaultError } from "../vault.js";
-import { app, createVault, startVault } from "../state.js";
-import { icon, field, spinner, toast } from "./common.js";
+import { app, createVault, startVault, emit } from "../state.js";
+import { listCopies, getCopy, deleteCopy, deviceCopyIsNewer, deviceStorageAvailable } from "../device.js";
+import { icon, field, spinner, toast, openDialog, confirmDialog } from "./common.js";
+import { installSlot } from "./install.js";
 import { openHelp } from "./help.js";
 
 export function renderWelcome() {
@@ -10,10 +12,11 @@ export function renderWelcome() {
   root.append(
     h("div", { class: "welcome-top" },
       h("div", { class: "brand" }, h("div", { class: "brand-mark", "aria-hidden": "true", text: "A" }), h("span", { text: "AXON" })),
-      h("button", { type: "button", class: "btn ghost", onclick: () => openHelp() }, icon("help"), "How it works")),
+      h("div", { class: "row" }, installSlot(), h("button", { type: "button", class: "btn ghost", onclick: () => openHelp() }, icon("help"), "How it works"))),
     h("header", { class: "hero" },
       h("h1", { text: "Messages, made manageable." }),
       h("p", { text: "AXON explains the tone of a message, offers calm ways to reply, and remembers the people in your life. All of it lives in one encrypted file that only you hold. There's no account and nothing stored on our servers." })),
+    deviceCard(), // first: returning people with a device copy should see it without scrolling
     h("div", { class: "welcome-cards" }, newCard(), openCard()),
     h("div", { class: "promises" },
       promise("lock", "Encrypted on your device", "Your vault is locked with your passphrase before it's ever saved."),
@@ -130,8 +133,24 @@ function openCard() {
     btn.disabled = true;
     btn.replaceChildren(spinner(), "Unlocking…");
     try {
-      const { vault, session } = await openVault(fileText, pass.value);
-      startVault(vault, session, fileName);
+      let { vault, session } = await openVault(fileText, pass.value);
+      let dirty = false;
+      let name = fileName;
+      // If this browser holds NEWER changes than the file, let the person choose — never silently pick one.
+      if (vault.deviceSlot && deviceStorageAvailable()) {
+        try {
+          const copy = await getCopy(vault.deviceSlot);
+          if (copy && deviceCopyIsNewer(copy, vault)) {
+            const device = await openVault(copy.text, pass.value).catch(() => null);
+            if (device && (await chooseNewer(vault, copy)) === "device") {
+              ({ vault, session } = device);
+              dirty = true;
+              name = "this device's saved copy";
+            }
+          }
+        } catch { /* storage unavailable: just open the file */ }
+      }
+      startVault(vault, session, name, { dirty });
       toast(`Vault opened — revision ${vault.revision}, saved ${fmtFull(vault.updatedAt)}.`);
     } catch (err) {
       showError(err.message || "Couldn't open that vault.");
@@ -144,4 +163,65 @@ function openCard() {
     h("p", { class: "muted", text: "Been here before? Bring your saved vault file. Open the one with the highest revision number (r12 beats r11)." }),
     picker, drop, passField, error, btn);
   return h("section", { class: "card", "aria-label": "Open my vault" }, form);
+}
+
+function chooseNewer(fileVault, copy) {
+  return openDialog({
+    title: "This device has newer changes",
+    dismissible: false,
+    body: h("div", { class: "stack" },
+      h("p", { text: `Your vault file is revision ${fileVault.revision}, saved ${fmtPrecise(fileVault.updatedAt)}. This device holds a newer copy, saved ${fmtPrecise(copy.savedAt)}.` }),
+      h("div", { class: "note warn", text: "If you open the file instead, the newer copy on this device is replaced the next time you make a change." })),
+    actions: [
+      { label: "Open the file", value: "file" },
+      { label: "Use the newer copy on this device", kind: "primary", value: "device" },
+    ],
+  }).closed;
+}
+
+// ── "Continue on this device": only shown when the person opted in earlier ──
+function deviceCard() {
+  const box = h("section", { class: "card stack hidden", id: "device-card", "aria-labelledby": "device-h", style: null });
+  const fill = async () => {
+    const copies = deviceStorageAvailable() ? await listCopies() : [];
+    if (!copies.length) return;
+    box.classList.remove("hidden");
+    box.replaceChildren(
+      h("h2", { id: "device-h", class: "row" }, icon("device"), "Continue on this device"),
+      h("p", { class: "muted", text: "You chose to keep an encrypted copy in this browser. Enter your passphrase to carry on, even without a connection." }),
+      ...copies.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt)).map(copyRow));
+  };
+  fill();
+  return box;
+}
+
+function copyRow(copy) {
+  const pass = h("input", { class: "input", type: "password", autocomplete: "current-password", id: `dc-pass-${copy.slot}`, "aria-label": "Passphrase for the copy on this device" });
+  const error = h("div", { class: "err hidden", role: "alert" });
+  const btn = h("button", { type: "submit", class: "btn primary" }, icon("lock"), "Unlock");
+  const form = h("form", { class: "copy-row", novalidate: true, onsubmit: async (e) => {
+    e.preventDefault();
+    error.classList.add("hidden");
+    if (!pass.value) { error.textContent = "Please enter your passphrase."; error.classList.remove("hidden"); return; }
+    btn.disabled = true; btn.replaceChildren(spinner(), "Unlocking…");
+    try {
+      const { vault, session } = await openVault(copy.text, pass.value);
+      startVault(vault, session, "this device's saved copy", { dirty: deviceCopyIsNewer(copy, vault) });
+      toast("Opened the copy saved on this device.");
+    } catch (err) {
+      error.textContent = err.message || "Couldn't open that copy."; error.classList.remove("hidden");
+      btn.disabled = false; btn.replaceChildren(icon("lock"), "Unlock"); pass.select();
+    }
+  } },
+    h("div", {}, h("strong", { text: "Saved copy on this device" }), h("div", { class: "muted small", text: `Revision ${copy.revision} · saved ${fmtAgo(copy.savedAt)} (${fmtFull(copy.savedAt)})` })),
+    field({ label: "Your passphrase", id: `dc-pass-${copy.slot}`, control: pass }),
+    error,
+    h("div", { class: "row wrap" }, btn,
+      h("button", { type: "button", class: "btn ghost danger", onclick: async () => {
+        if (!(await confirmDialog({ title: "Remove the copy from this device?", message: "This deletes the saved copy in this browser. Your vault files are not touched. This can't be undone.", confirmLabel: "Remove it", danger: true }))) return;
+        await deleteCopy(copy.slot);
+        toast("Removed from this device.");
+        emit();
+      } }, "Remove from this device")));
+  return form;
 }
